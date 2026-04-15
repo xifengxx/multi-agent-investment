@@ -60,6 +60,65 @@ export SQLITE_PATH="data/app.db"
 export ANALYSIS_PARALLELISM="3"
 ```
 
+### 2.4 LLM（可选：真实 Providers）
+
+说明：
+
+- 本项目支持“配置驱动”的 provider 选择：通过 `LLM_ENABLED_PROVIDERS` 指定候选集合。
+- `DRY_RUN=true` **不会**自动关闭 LLM 调用：若你启用了真实 LLM providers，仍会发起真实请求（可能产生计费）。
+- 强烈建议把 API Key 放在本地环境变量/私有 `.env` 中，并确保不提交到 git；也不要在日志/截图/Issue 中粘贴 key。
+
+核心变量：
+
+- `LLM_ENABLED_PROVIDERS`：逗号分隔，支持：`openai,anthropic,gemini,qwen,glm,kimi`（顺序即调用顺序）。
+- `LLM_MIN_EFFECTIVE_PROVIDERS`：非负整数，表示本次运行至少需要的“有效 provider”数量。
+  - “有效 provider” = 具备最小调用所需字段（通常为 `*_API_KEY + *_MODEL`；其中 `qwen/glm/kimi` 还要求 `*_BASE_URL` 非空）。
+  - 当 `LLM_MIN_EFFECTIVE_PROVIDERS > 0` 且有效 provider 数不足时，本次 `daily` 会标记为 `DEGRADED` 并仅记录降级通知。
+
+各 provider 配置字段（按需填写）：
+
+- OpenAI：`OPENAI_API_KEY / OPENAI_MODEL / OPENAI_BASE_URL(可选)`
+- Anthropic：`ANTHROPIC_API_KEY / ANTHROPIC_MODEL / ANTHROPIC_BASE_URL(预留，可选)`
+- Gemini：`GEMINI_API_KEY / GEMINI_MODEL / GEMINI_BASE_URL(预留，可选)`
+- Qwen（OpenAI-compatible）：`QWEN_API_KEY / QWEN_MODEL / QWEN_BASE_URL(必填)`
+- GLM（OpenAI-compatible）：`GLM_API_KEY / GLM_MODEL / GLM_BASE_URL(必填)`
+- Kimi（OpenAI-compatible）：`KIMI_API_KEY / KIMI_MODEL / KIMI_BASE_URL(必填)`
+
+示例（占位符请替换为你自己的值；`*_BASE_URL` 以各厂商官方文档为准）：
+
+```bash
+export LLM_ENABLED_PROVIDERS="openai,anthropic,gemini,qwen,glm,kimi"
+export LLM_MIN_EFFECTIVE_PROVIDERS="3"
+
+# OpenAI
+export OPENAI_API_KEY="sk-..."
+export OPENAI_MODEL="gpt-4.1-mini"
+export OPENAI_BASE_URL="https://api.openai.com/v1"
+
+# Anthropic
+export ANTHROPIC_API_KEY="sk-ant-..."
+export ANTHROPIC_MODEL="claude-3-5-sonnet-latest"
+
+# Gemini（Google AI Studio）
+export GEMINI_API_KEY="..."
+export GEMINI_MODEL="gemini-2.0-flash"
+
+# Qwen（DashScope OpenAI-compatible）
+export QWEN_API_KEY="..."
+export QWEN_MODEL="qwen-max"
+export QWEN_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+# GLM（Zhipu OpenAI-compatible）
+export GLM_API_KEY="..."
+export GLM_MODEL="glm-4"
+export GLM_BASE_URL="https://open.bigmodel.cn/api/paas/v4"  # 示例
+
+# Kimi（Moonshot OpenAI-compatible）
+export KIMI_API_KEY="..."
+export KIMI_MODEL="moonshot-v1-8k"
+export KIMI_BASE_URL="https://api.moonshot.cn/v1"
+```
+
 ---
 
 ## 3. 输入数据契约（daily 必备）
@@ -92,8 +151,10 @@ python -m app.main daily
 
 说明：
 
-- 当前 CLI 不会注入 LLM providers，因此会进入 `DEGRADED`（不会产生 decisions / 通知 / ledger）。
-- 仍会写入 `runs`、`file_batches`、`instrument_snapshots`，用于验证输入与落库链路。
+- CLI 会从环境变量读取配置并运行全链路；若未启用/未配置有效的 LLM providers，LLM 分析会被跳过，最终 `decisions` 可能为空。
+- `DRY_RUN=true` 时不会发起真实 Telegram 网络请求，但仍会落库 `notifications`（`status=SENT` 且记录 request 摘要）。
+- 当 `LLM_MIN_EFFECTIVE_PROVIDERS > 0` 且有效 provider 数不足时，会进入 `DEGRADED`：
+  - 仅落库 `runs + notifications`（降级通知），不会进行输入扫描/解析/LLM/决策/记账。
 
 ### 4.2 完整流水线（推荐本地：Mock providers + dry_run）
 
@@ -163,12 +224,12 @@ python -m app.main weekly
 
 触发条件：
 
-- `providers` 数量不足（<3）
+- 当 `LLM_MIN_EFFECTIVE_PROVIDERS > 0` 且“有效 provider”数量不足（`< LLM_MIN_EFFECTIVE_PROVIDERS`）
 
 结果：
 
-- 会落库 runs/file_batches/instrument_snapshots（以及若 providers>0 还会写 llm_outputs）
-- 不会生成 decisions / 不会写 paper_trades / positions / 推送消息
+- 会落库 `runs` 与一条 `notifications`（降级通知，dry_run 下也会记录）
+- 不会扫描/解析输入文件，不会生成 `llm_outputs / decisions / paper_trades / positions`
 
 处理：
 
@@ -251,4 +312,3 @@ select
   (select count(*) from paper_trades where run_id='<RUN_ID>') as paper_trades
 ;"
 ```
-
