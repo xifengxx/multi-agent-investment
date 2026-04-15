@@ -122,16 +122,19 @@ def _format_degraded_message(
     effective_count: int,
     candidates: tuple[str, ...],
     disabled_reasons: dict[str, str],
+    runtime_errors: dict[str, str] | None = None,
 ) -> str:
     """构造降级通知消息文本（不得包含敏感信息）。"""
     disabled_part = ", ".join(f"{name}:{reason}" for name, reason in sorted(disabled_reasons.items()))
+    runtime_part = ", ".join(f"{name}:{reason}" for name, reason in sorted((runtime_errors or {}).items()))
     candidates_part = ", ".join(candidates) if candidates else "(empty)"
     return (
         f"Run {run_id} DEGRADED: providers_insufficient\n"
         f"- min_required={min_required}\n"
         f"- effective={effective_count}\n"
         f"- candidates=[{candidates_part}]\n"
-        f"- disabled=[{disabled_part or '(none)'}]"
+        f"- disabled=[{disabled_part or '(none)'}]\n"
+        f"- runtime_errors=[{runtime_part or '(none)'}]"
     )
 
 
@@ -263,37 +266,87 @@ def daily_run(
         snapshot_repo.insert_instrument_rows(batch_id=batch_id, rows=[*stock_rows, *etf_rows])
 
         all_votes: list[dict[str, Any]] = []
+        runtime_errors: dict[str, str] = {}
+        successful_providers: list[str] = []
         for provider in provider_list:
-            engine = build_llm_invoke_engine(config=config, provider=provider, repository=llm_repo)
+            try:
+                engine = build_llm_invoke_engine(config=config, provider=provider, repository=llm_repo)
 
-            stock_results = engine.analyze_and_persist(
-                run_id=run_id,
-                snapshot_date=resolved_snapshot_date,
-                instrument_type="stock",
-                instruments=stock_rows,
-            )
-            etf_results = engine.analyze_and_persist(
-                run_id=run_id,
-                snapshot_date=resolved_snapshot_date,
-                instrument_type="etf",
-                instruments=etf_rows,
-            )
-            all_votes.extend(
-                _votes_from_engine_results(
+                stock_results = engine.analyze_and_persist(
+                    run_id=run_id,
                     snapshot_date=resolved_snapshot_date,
                     instrument_type="stock",
-                    provider=provider,
-                    engine_results=stock_results,
+                    instruments=stock_rows,
                 )
-            )
-            all_votes.extend(
-                _votes_from_engine_results(
+                etf_results = engine.analyze_and_persist(
+                    run_id=run_id,
                     snapshot_date=resolved_snapshot_date,
                     instrument_type="etf",
-                    provider=provider,
-                    engine_results=etf_results,
+                    instruments=etf_rows,
                 )
+                all_votes.extend(
+                    _votes_from_engine_results(
+                        snapshot_date=resolved_snapshot_date,
+                        instrument_type="stock",
+                        provider=provider,
+                        engine_results=stock_results,
+                    )
+                )
+                all_votes.extend(
+                    _votes_from_engine_results(
+                        snapshot_date=resolved_snapshot_date,
+                        instrument_type="etf",
+                        provider=provider,
+                        engine_results=etf_results,
+                    )
+                )
+                successful_providers.append(provider.name)
+            except Exception as exc:
+                runtime_errors[provider.name] = str(exc)
+                continue
+
+        if min_required > 0 and len(successful_providers) < min_required:
+            message_text = _format_degraded_message(
+                run_id=run_id,
+                min_required=min_required,
+                effective_count=len(successful_providers),
+                candidates=tuple(getattr(config, "llm_enabled_providers", ()) or ()),
+                disabled_reasons=disabled_reasons,
+                runtime_errors=runtime_errors,
             )
+            try:
+                adapter = TelegramAdapter(
+                    bot_token=config.telegram_bot_token,
+                    chat_id=config.telegram_chat_id,
+                    dry_run=effective_dry_run,
+                )
+                response = adapter.send_message(text=message_text)
+                sent_ok = bool(response.get("ok"))
+                notification_repo.insert_notification(
+                    run_id=run_id,
+                    channel="telegram",
+                    message_text=message_text,
+                    dry_run=effective_dry_run,
+                    status="SENT" if sent_ok else "FAILED",
+                    provider_response_json=json.dumps(response, ensure_ascii=False),
+                )
+            except Exception as notify_exc:
+                notification_repo.insert_notification(
+                    run_id=run_id,
+                    channel="telegram",
+                    message_text=message_text,
+                    dry_run=effective_dry_run,
+                    status="FAILED",
+                    provider_response_json=json.dumps({"error": str(notify_exc)}, ensure_ascii=False),
+                )
+
+            run_repo.mark_run_end(
+                run_id=run_id,
+                status="DEGRADED",
+                ended_at=_now_iso(),
+                error_message=f"providers_insufficient_runtime:{len(successful_providers)}/{min_required}",
+            )
+            return run_id
 
         aggregator = VotingAggregator()
         decisions = aggregator.aggregate_for_run(run_id=run_id, votes=all_votes, top_n=10)
