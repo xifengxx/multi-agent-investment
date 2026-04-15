@@ -5,7 +5,6 @@
 - 不可用原因以短码返回（用于审计/通知），不得包含敏感信息（如 API Key）。
 
 注意：当前阶段 Provider 仅需要满足 BaseLLMProvider 接口即可。
-真实 HTTP Provider 的实现会在后续任务中替换这些 stub。
 """
 
 from __future__ import annotations
@@ -13,34 +12,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from analysis.providers.base import BaseLLMProvider
+from analysis.providers.anthropic_provider import AnthropicProvider
+from analysis.providers.gemini_provider import GeminiProvider
+from analysis.providers.openai_compatible_provider import OpenAICompatibleProvider
 from app.config import AppConfig
 
 
 _OPENAI_DEFAULT_BASE_URL = "https://api.openai.com/v1"
-
-
-@dataclass(frozen=True)
-class _ProviderStub(BaseLLMProvider):
-    """用于 Registry 的最小 Provider 占位实现。
-
-    目的：
-    - 让 Registry 能够返回 BaseLLMProvider 实例并被上层注入；
-    - 在未接入真实 HTTP 调用前，明确禁止 invoke 被误用。
-    """
-
-    provider_name: str
-    model: str
-    api_key: str
-    base_url: str | None = None
-
-    @property
-    def name(self) -> str:
-        """返回 provider 名称。"""
-        return self.provider_name
-
-    def invoke(self, prompt: str) -> str:
-        """占位实现：明确禁止在未实现真实调用前执行 invoke。"""
-        raise NotImplementedError("provider invoke 尚未实现（待接入真实 HTTP provider）")
+_DEFAULT_ANTHROPIC_MAX_TOKENS = 1024
 
 
 @dataclass(frozen=True)
@@ -86,6 +65,7 @@ def _build_provider_from_config(
 
     if name == "openai":
         return _build_openai_like_provider(
+            config=config,
             provider_name="openai",
             api_key=config.openai_api_key,
             model=config.openai_model,
@@ -94,6 +74,7 @@ def _build_provider_from_config(
         )
     if name == "qwen":
         return _build_openai_like_provider(
+            config=config,
             provider_name="qwen",
             api_key=config.qwen_api_key,
             model=config.qwen_model,
@@ -102,6 +83,7 @@ def _build_provider_from_config(
         )
     if name == "glm":
         return _build_openai_like_provider(
+            config=config,
             provider_name="glm",
             api_key=config.glm_api_key,
             model=config.glm_model,
@@ -110,6 +92,7 @@ def _build_provider_from_config(
         )
     if name == "kimi":
         return _build_openai_like_provider(
+            config=config,
             provider_name="kimi",
             api_key=config.kimi_api_key,
             model=config.kimi_model,
@@ -117,9 +100,19 @@ def _build_provider_from_config(
             base_url_required=True,
         )
     if name == "anthropic":
-        return _build_simple_provider(provider_name="anthropic", api_key=config.anthropic_api_key, model=config.anthropic_model)
+        return _build_simple_provider(
+            config=config,
+            provider_name="anthropic",
+            api_key=config.anthropic_api_key,
+            model=config.anthropic_model,
+        )
     if name == "gemini":
-        return _build_simple_provider(provider_name="gemini", api_key=config.gemini_api_key, model=config.gemini_model)
+        return _build_simple_provider(
+            config=config,
+            provider_name="gemini",
+            api_key=config.gemini_api_key,
+            model=config.gemini_model,
+        )
 
     # AppConfig 已对 enabled_providers 做了白名单校验；这里保持防御式分支。
     return None, "unknown_provider"
@@ -127,6 +120,7 @@ def _build_provider_from_config(
 
 def _build_simple_provider(
     *,
+    config: AppConfig,
     provider_name: str,
     api_key: str,
     model: str,
@@ -136,11 +130,33 @@ def _build_simple_provider(
         return None, "missing_api_key"
     if not model.strip():
         return None, "missing_model"
-    return _ProviderStub(provider_name=provider_name, api_key=api_key, model=model, base_url=None), None
+    if provider_name == "anthropic":
+        return (
+            AnthropicProvider(
+                model=model,
+                api_key=api_key,
+                max_tokens=_DEFAULT_ANTHROPIC_MAX_TOKENS,
+                timeout_seconds=float(config.llm_request_timeout_seconds),
+                provider_name="anthropic",
+            ),
+            None,
+        )
+    if provider_name == "gemini":
+        return (
+            GeminiProvider(
+                model=model,
+                api_key=api_key,
+                timeout_seconds=float(config.llm_request_timeout_seconds),
+                provider_name="gemini",
+            ),
+            None,
+        )
+    return None, "unknown_provider"
 
 
 def _build_openai_like_provider(
     *,
+    config: AppConfig,
     provider_name: str,
     api_key: str,
     model: str,
@@ -160,11 +176,14 @@ def _build_openai_like_provider(
         normalized_base_url = _OPENAI_DEFAULT_BASE_URL
 
     return (
-        _ProviderStub(
-            provider_name=provider_name,
-            api_key=api_key,
-            model=model,
+        OpenAICompatibleProvider(
             base_url=normalized_base_url,
+            model=model,
+            api_key=api_key,
+            timeout_seconds=float(config.llm_request_timeout_seconds),
+            max_retries=int(config.llm_max_retries),
+            extra_headers=None,
+            provider_name=provider_name,
         ),
         None,
     )
