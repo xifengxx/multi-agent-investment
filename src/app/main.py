@@ -6,7 +6,7 @@ import argparse
 
 from app.config import AppConfig, load_config
 from common.types import RunMode
-from orchestrator.run_orchestrator import daily_run
+from orchestrator.run_orchestrator import daily_run, weekly_run
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -24,7 +24,8 @@ def run(mode: RunMode, config: AppConfig) -> int:
         print(f"daily run_id={run_id}")
         return 0
     if mode == "weekly":
-        print("weekly orchestrator: TODO (占位)")
+        run_id = weekly_run(config=config, week_end=None, dry_run=config.dry_run)
+        print(f"weekly run_id={run_id}")
         return 0
     return 0
 

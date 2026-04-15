@@ -59,3 +59,28 @@ def format_recommendation_message(*, run_id: str, decisions: list[dict[str, Any]
     ]
     return "\n\n".join([header, *sections]).strip()
 
+
+def format_weekly_review_message(*, run_id: str, report: dict[str, Any]) -> str:
+    """将周度复盘 report 格式化为可直接发送的文本消息。
+
+    约定：
+    - report 来自 review.weekly_review_service.compute_weekly_report
+    - 输出保持确定性：同一输入应产生完全一致的字符串
+    """
+    week_start = str(report.get("week_start", "")).strip()
+    week_end = str(report.get("week_end", "")).strip()
+    trade_count = report.get("trade_count", 0)
+    unique_symbols = report.get("unique_symbols", 0)
+    by_type = report.get("by_instrument_type") or {}
+
+    def _render_type_line(itype: str) -> str:
+        bucket = by_type.get(itype) or {}
+        tc = bucket.get("trade_count", 0)
+        us = bucket.get("unique_symbols", 0)
+        return f"- {itype}: trades={tc}, symbols={us}"
+
+    header = f"Weekly Review / Run {run_id}".strip()
+    range_line = f"Range: {week_start} ~ {week_end}".strip()
+    summary = f"Trades: {trade_count}, Unique Symbols: {unique_symbols}".strip()
+    sections = ["By Type:", _render_type_line("stock"), _render_type_line("etf")]
+    return "\n".join([header, range_line, summary, *sections]).strip()

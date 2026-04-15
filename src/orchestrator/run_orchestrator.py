@@ -19,13 +19,15 @@ from ingestion.file_scanner import scan_file_pair_candidates
 from ingestion.input_contract_validator import ContractViolation, validate_file_pair_candidate
 from ingestion.excel_parser import ExcelParseError, parse_validated_file_pair
 from ledger.paper_ledger_service import PaperLedgerService
-from notification.message_formatter import format_recommendation_message
+from notification.message_formatter import format_recommendation_message, format_weekly_review_message
 from notification.telegram_adapter import TelegramAdapter
+from review.weekly_review_service import compute_weekly_report
 from storage.db import init_db, open_sqlite_connection
 from storage.repositories.decision_repository import DecisionRepository
 from storage.repositories.ledger_repository import LedgerRepository
 from storage.repositories.llm_repository import LLMRepository
 from storage.repositories.notification_repository import NotificationRepository
+from storage.repositories.review_repository import ReviewRepository
 from storage.repositories.run_repository import RunRepository
 from storage.repositories.snapshot_repository import SnapshotRepository
 
@@ -250,6 +252,120 @@ def daily_run(
 
         # 尝试发送失败通知（dry_run 时也记录）
         failure_text = f"Run {run_id} FAILED: {error_message}"
+        try:
+            adapter = TelegramAdapter(
+                bot_token=config.telegram_bot_token,
+                chat_id=config.telegram_chat_id,
+                dry_run=effective_dry_run,
+            )
+            response = adapter.send_message(text=failure_text)
+            NotificationRepository(conn).insert_notification(
+                run_id=run_id,
+                channel="telegram",
+                message_text=failure_text,
+                dry_run=effective_dry_run,
+                status="SENT" if bool(response.get("ok")) else "FAILED",
+                provider_response_json=json.dumps(response, ensure_ascii=False),
+            )
+        except Exception as notify_exc:
+            try:
+                NotificationRepository(conn).insert_notification(
+                    run_id=run_id,
+                    channel="telegram",
+                    message_text=failure_text,
+                    dry_run=effective_dry_run,
+                    status="FAILED",
+                    provider_response_json=json.dumps({"error": str(notify_exc)}, ensure_ascii=False),
+                )
+            except Exception:
+                pass
+        return run_id
+    finally:
+        conn.close()
+
+
+def weekly_run(
+    config: AppConfig,
+    week_end: str | None = None,
+    dry_run: bool | None = None,
+) -> str:
+    """执行一次周度复盘流程并返回 run_id。
+
+    运行阶段（成功路径）：
+    - runs: create_run(RUNNING, trigger_type=scheduled_weekly)
+    - compute_weekly_report（基于 paper_trades 的基础统计）
+    - weekly_reviews 落库（report_json）
+    - format 消息 -> TelegramAdapter 发送（dry_run 支持）并记录 notifications
+    - runs: mark_run_end(SUCCEEDED)
+
+    失败分支：
+    - 异常 -> runs: mark_run_end(FAILED, error_message)
+    - 尝试发送失败通知（dry_run 时也记录）
+    """
+    effective_dry_run = config.dry_run if dry_run is None else bool(dry_run)
+    resolved_week_end = (
+        week_end if week_end is not None else datetime.now(timezone.utc).date().isoformat()
+    )
+
+    run_id = f"run-{uuid.uuid4().hex}"
+    started_at = _now_iso()
+    conn = open_sqlite_connection(config.sqlite_path)
+    try:
+        init_db(conn)
+
+        run_repo = RunRepository(conn)
+        notification_repo = NotificationRepository(conn)
+        review_repo = ReviewRepository(conn)
+
+        run_repo.create_run(
+            run_id=run_id,
+            trigger_type="scheduled_weekly",
+            snapshot_date=resolved_week_end,
+            status="RUNNING",
+            started_at=started_at,
+        )
+
+        report = compute_weekly_report(conn, week_end=resolved_week_end, days=7)
+        review_repo.insert_weekly_review(
+            review_id=f"review-{uuid.uuid4().hex}",
+            week_start=str(report.get("week_start", "")),
+            week_end=str(report.get("week_end", "")),
+            report_json=json.dumps(report, ensure_ascii=False),
+        )
+
+        message_text = format_weekly_review_message(run_id=run_id, report=report)
+        adapter = TelegramAdapter(
+            bot_token=config.telegram_bot_token,
+            chat_id=config.telegram_chat_id,
+            dry_run=effective_dry_run,
+        )
+        response = adapter.send_message(text=message_text)
+        sent_ok = bool(response.get("ok"))
+        notification_repo.insert_notification(
+            run_id=run_id,
+            channel="telegram",
+            message_text=message_text,
+            dry_run=effective_dry_run,
+            status="SENT" if sent_ok else "FAILED",
+            provider_response_json=json.dumps(response, ensure_ascii=False),
+        )
+
+        run_repo.mark_run_end(run_id=run_id, status="SUCCEEDED", ended_at=_now_iso(), error_message=None)
+        return run_id
+    except Exception as exc:
+        error_message = str(exc)
+        ended_at = _now_iso()
+        try:
+            RunRepository(conn).mark_run_end(
+                run_id=run_id,
+                status="FAILED",
+                ended_at=ended_at,
+                error_message=error_message,
+            )
+        except Exception:
+            pass
+
+        failure_text = f"Weekly Run {run_id} FAILED: {error_message}"
         try:
             adapter = TelegramAdapter(
                 bot_token=config.telegram_bot_token,

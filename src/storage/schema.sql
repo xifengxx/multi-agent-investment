@@ -132,3 +132,24 @@ CREATE TABLE IF NOT EXISTS positions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_positions_symbol ON positions(symbol);
+
+-- 周度复盘（Weekly Review）
+CREATE TABLE IF NOT EXISTS weekly_reviews (
+    review_id TEXT PRIMARY KEY,
+    week_start TEXT NOT NULL,
+    week_end TEXT NOT NULL,
+    report_json TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_weekly_reviews_week_end ON weekly_reviews(week_end);
+CREATE INDEX IF NOT EXISTS idx_weekly_reviews_created_at ON weekly_reviews(created_at);
+
+-- Provider 评分（后续可用于动态加权/表现跟踪）
+CREATE TABLE IF NOT EXISTS provider_scores (
+    provider TEXT PRIMARY KEY,
+    score REAL NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_provider_scores_updated_at ON provider_scores(updated_at);
