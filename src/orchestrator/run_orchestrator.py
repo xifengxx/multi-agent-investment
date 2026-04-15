@@ -271,39 +271,55 @@ def daily_run(
         for provider in provider_list:
             try:
                 engine = build_llm_invoke_engine(config=config, provider=provider, repository=llm_repo)
+            except Exception as exc:
+                runtime_errors[provider.name] = str(exc)
+                continue
 
+            stock_results = []
+            etf_results = []
+            provider_ok = False
+
+            try:
                 stock_results = engine.analyze_and_persist(
                     run_id=run_id,
                     snapshot_date=resolved_snapshot_date,
                     instrument_type="stock",
                     instruments=stock_rows,
                 )
+                provider_ok = True
+            except Exception as exc:
+                runtime_errors[f"{provider.name}.stock"] = str(exc)
+
+            try:
                 etf_results = engine.analyze_and_persist(
                     run_id=run_id,
                     snapshot_date=resolved_snapshot_date,
                     instrument_type="etf",
                     instruments=etf_rows,
                 )
-                all_votes.extend(
-                    _votes_from_engine_results(
-                        snapshot_date=resolved_snapshot_date,
-                        instrument_type="stock",
-                        provider=provider,
-                        engine_results=stock_results,
-                    )
-                )
-                all_votes.extend(
-                    _votes_from_engine_results(
-                        snapshot_date=resolved_snapshot_date,
-                        instrument_type="etf",
-                        provider=provider,
-                        engine_results=etf_results,
-                    )
-                )
-                successful_providers.append(provider.name)
+                provider_ok = True
             except Exception as exc:
-                runtime_errors[provider.name] = str(exc)
-                continue
+                runtime_errors[f"{provider.name}.etf"] = str(exc)
+
+            if provider_ok:
+                successful_providers.append(provider.name)
+
+            all_votes.extend(
+                _votes_from_engine_results(
+                    snapshot_date=resolved_snapshot_date,
+                    instrument_type="stock",
+                    provider=provider,
+                    engine_results=stock_results,
+                )
+            )
+            all_votes.extend(
+                _votes_from_engine_results(
+                    snapshot_date=resolved_snapshot_date,
+                    instrument_type="etf",
+                    provider=provider,
+                    engine_results=etf_results,
+                )
+            )
 
         if min_required > 0 and len(successful_providers) < min_required:
             message_text = _format_degraded_message(
