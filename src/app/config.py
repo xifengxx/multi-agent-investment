@@ -32,6 +32,7 @@ class AppConfig:
     llm_min_effective_providers: int = 0
     llm_request_timeout_seconds: int = 30
     llm_max_retries: int = 2
+    llm_max_instruments_per_type: int = 20
     # OpenAI
     openai_api_key: str = ""
     openai_model: str = ""
@@ -150,6 +151,7 @@ def load_config() -> AppConfig:
     llm_min_effective_providers = _read_non_negative_int_env("LLM_MIN_EFFECTIVE_PROVIDERS", default=0)
     llm_request_timeout_seconds = _read_int_env("LLM_REQUEST_TIMEOUT_SECONDS", default=30)
     llm_max_retries = _read_non_negative_int_env("LLM_MAX_RETRIES", default=2)
+    llm_max_instruments_per_type = _read_non_negative_int_env("LLM_MAX_INSTRUMENTS_PER_TYPE", default=20)
 
     openai_api_key = _read_str_env("OPENAI_API_KEY", default="")
     openai_model = _read_str_env("OPENAI_MODEL", default="")
@@ -209,6 +211,7 @@ def load_config() -> AppConfig:
         llm_min_effective_providers=llm_min_effective_providers,
         llm_request_timeout_seconds=llm_request_timeout_seconds,
         llm_max_retries=llm_max_retries,
+        llm_max_instruments_per_type=llm_max_instruments_per_type,
         openai_api_key=openai_api_key,
         openai_model=openai_model,
         openai_base_url=openai_base_url,

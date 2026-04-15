@@ -38,6 +38,7 @@ def test_load_config_reads_and_converts_env_values(monkeypatch: pytest.MonkeyPat
     monkeypatch.setenv("LLM_MIN_EFFECTIVE_PROVIDERS", "1")
     monkeypatch.setenv("LLM_REQUEST_TIMEOUT_SECONDS", "15")
     monkeypatch.setenv("LLM_MAX_RETRIES", "3")
+    monkeypatch.setenv("LLM_MAX_INSTRUMENTS_PER_TYPE", "5")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-openai")
     monkeypatch.setenv("OPENAI_MODEL", "gpt-4o-mini")
     monkeypatch.setenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
@@ -57,6 +58,7 @@ def test_load_config_reads_and_converts_env_values(monkeypatch: pytest.MonkeyPat
     assert config.llm_min_effective_providers == 1
     assert config.llm_request_timeout_seconds == 15
     assert config.llm_max_retries == 3
+    assert config.llm_max_instruments_per_type == 5
     assert config.openai_api_key == "sk-test-openai"
     assert config.openai_model == "gpt-4o-mini"
     assert config.openai_base_url == "https://api.openai.com/v1"
@@ -78,6 +80,7 @@ def test_load_config_uses_defaults_for_optional_values(monkeypatch: pytest.Monke
     monkeypatch.delenv("LLM_MIN_EFFECTIVE_PROVIDERS", raising=False)
     monkeypatch.delenv("LLM_REQUEST_TIMEOUT_SECONDS", raising=False)
     monkeypatch.delenv("LLM_MAX_RETRIES", raising=False)
+    monkeypatch.delenv("LLM_MAX_INSTRUMENTS_PER_TYPE", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_MODEL", raising=False)
     monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
@@ -108,6 +111,7 @@ def test_load_config_uses_defaults_for_optional_values(monkeypatch: pytest.Monke
     assert config.llm_min_effective_providers == 0
     assert config.llm_request_timeout_seconds == 30
     assert config.llm_max_retries == 2
+    assert config.llm_max_instruments_per_type == 20
     assert config.openai_api_key == ""
     assert config.openai_model == ""
     assert config.openai_base_url == ""
@@ -142,6 +146,8 @@ def test_load_config_uses_defaults_for_optional_values(monkeypatch: pytest.Monke
         ("LLM_REQUEST_TIMEOUT_SECONDS", "abc"),
         ("LLM_MAX_RETRIES", "-1"),
         ("LLM_MAX_RETRIES", "abc"),
+        ("LLM_MAX_INSTRUMENTS_PER_TYPE", "-1"),
+        ("LLM_MAX_INSTRUMENTS_PER_TYPE", "abc"),
     ],
 )
 def test_load_config_rejects_invalid_values(

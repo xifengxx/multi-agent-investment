@@ -135,6 +135,13 @@ def _format_degraded_message(
     )
 
 
+def _apply_instrument_limit(*, rows: list[Any], limit: int) -> list[Any]:
+    """对标的列表应用上限，limit=0 表示不限制。"""
+    if limit <= 0:
+        return rows
+    return rows[:limit]
+
+
 def daily_run(
     config: AppConfig,
     snapshot_date: str | None = None,
@@ -236,6 +243,14 @@ def daily_run(
         )
 
         stock_rows, etf_rows = parse_validated_file_pair(validated_pair)
+        stock_rows = _apply_instrument_limit(
+            rows=stock_rows,
+            limit=int(getattr(config, "llm_max_instruments_per_type", 0) or 0),
+        )
+        etf_rows = _apply_instrument_limit(
+            rows=etf_rows,
+            limit=int(getattr(config, "llm_max_instruments_per_type", 0) or 0),
+        )
 
         batch_id = snapshot_repo.create_file_batch(
             run_id=run_id,
