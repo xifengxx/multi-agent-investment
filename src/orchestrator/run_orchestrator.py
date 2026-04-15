@@ -78,8 +78,6 @@ def _votes_from_engine_results(
         symbol = getattr(res, "symbol", "")
         if validation is None:
             continue
-        if not bool(getattr(validation, "is_valid", False)):
-            continue
         parsed = getattr(validation, "parsed", {}) or {}
         recommendation = parsed.get("recommendation")
         if not isinstance(recommendation, str) or not recommendation.strip():
