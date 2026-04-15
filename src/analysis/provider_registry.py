@@ -138,6 +138,7 @@ def _build_simple_provider(
                 max_tokens=_DEFAULT_ANTHROPIC_MAX_TOKENS,
                 timeout_seconds=float(config.llm_request_timeout_seconds),
                 provider_name="anthropic",
+                base_url=(getattr(config, "anthropic_base_url", "").strip() or "https://api.anthropic.com"),
             ),
             None,
         )

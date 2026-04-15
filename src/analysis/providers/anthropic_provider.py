@@ -2,7 +2,7 @@
 
 目标（面向个人项目）：
 - 仅依赖标准库（urllib.request + json）；
-- 调用 Anthropic Messages API：POST https://api.anthropic.com/v1/messages；
+- 调用 Anthropic Messages API：POST {base_url}/v1/messages（base_url 可配置）；
 - headers: x-api-key / anthropic-version / content-type；
 - body: model / max_tokens / messages；
 - 解析响应 content blocks，将其中 type=="text" 的 text 字段拼接为字符串；
@@ -18,9 +18,6 @@ import urllib.request
 from urllib.error import HTTPError, URLError
 
 from analysis.providers.base import BaseLLMProvider
-
-
-_ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages"
 
 
 def _redact_api_key(text: str, api_key: str) -> str:
@@ -40,6 +37,7 @@ class AnthropicProvider(BaseLLMProvider):
     timeout_seconds: float = 30.0
     anthropic_version: str = "2023-06-01"
     provider_name: str = "anthropic"
+    base_url: str = "https://api.anthropic.com"
 
     @property
     def name(self) -> str:
@@ -71,7 +69,8 @@ class AnthropicProvider(BaseLLMProvider):
             "anthropic-version": self.anthropic_version,
         }
 
-        response_bytes = self._post(url=_ANTHROPIC_MESSAGES_URL, body=body, headers=headers)
+        url = f"{self.base_url.rstrip('/')}/v1/messages"
+        response_bytes = self._post(url=url, body=body, headers=headers)
         return self._parse_messages_response(response_bytes)
 
     def _post(self, *, url: str, body: bytes, headers: dict[str, str]) -> bytes:
@@ -123,4 +122,3 @@ class AnthropicProvider(BaseLLMProvider):
         """将底层异常统一封装为 RuntimeError，并确保不泄露 api_key。"""
         safe = _redact_api_key(str(error), self.api_key)
         return RuntimeError(f"AnthropicProvider 请求失败: {safe}")
-
