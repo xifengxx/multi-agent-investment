@@ -131,6 +131,56 @@ def test_tiering_and_top10_fill_are_applied_per_instrument_type() -> None:
     assert [item["rank_in_list"] for item in result["etf"]] == list(range(1, 11))
 
 
+@pytest.mark.parametrize(
+    ("rec1", "rec2"),
+    [
+        ("Strong Buy", "BUY"),
+        ("STRONG_BUY", "BUY"),
+        ("买入", "BUY"),
+        ("STRONGBUY", "BUY"),
+    ],
+)
+def test_recommendation_synonyms_are_counted_as_buy(rec1: str, rec2: str) -> None:
+    """常见推荐语的别名/格式差异应被计为 BUY 票。"""
+    from decision.voting_aggregator import VotingAggregator
+
+    snapshot_date = "2026-04-15"
+    votes = [
+        {
+            "snapshot_date": snapshot_date,
+            "instrument_type": "stock",
+            "symbol": "AAPL",
+            "provider": "p1",
+            "recommendation": rec1,
+            "confidence": 0.8,
+            "rationale": ["r1"],
+        },
+        {
+            "snapshot_date": snapshot_date,
+            "instrument_type": "stock",
+            "symbol": "AAPL",
+            "provider": "p2",
+            "recommendation": rec2,
+            "confidence": 0.7,
+            "rationale": ["r2"],
+        },
+        {
+            "snapshot_date": snapshot_date,
+            "instrument_type": "stock",
+            "symbol": "AAPL",
+            "provider": "p3",
+            "recommendation": "HOLD",
+            "confidence": 0.6,
+            "rationale": ["r3"],
+        },
+    ]
+
+    result = VotingAggregator().aggregate_top10(votes, top_n=10)
+    assert len(result["stock"]) == 1
+    assert result["stock"][0]["votes"] == 2
+    assert result["stock"][0]["tier"] == 3
+
+
 def test_sorting_is_deterministic_when_input_order_changes() -> None:
     """输入顺序变化时，输出应保持确定性（不依赖 dict/set 遍历顺序）。"""
     from decision.voting_aggregator import VotingAggregator

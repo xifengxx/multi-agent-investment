@@ -53,8 +53,19 @@ def _coerce_vote_dto(item: dict[str, Any]) -> VoteDTO:
 
 def _is_buy(recommendation: str) -> bool:
     """判断是否为 BUY 票（容错：大小写/常见别名）。"""
-    rec = (recommendation or "").strip().upper()
-    return rec in {"BUY", "LONG", "STRONG_BUY"}
+    rec_raw = (recommendation or "").strip()
+    if not rec_raw:
+        return False
+
+    # 中文兼容（常见输出）
+    if rec_raw in {"买入", "强烈买入", "强力买入"}:
+        return True
+
+    rec = rec_raw.strip().upper()
+    rec = rec.replace("-", "_").replace(" ", "_")
+    while "__" in rec:
+        rec = rec.replace("__", "_")
+    return rec in {"BUY", "LONG", "STRONG_BUY", "STRONGBUY"}
 
 
 def _tier_for_votes(votes: int) -> Tier | None:
