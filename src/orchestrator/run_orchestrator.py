@@ -365,7 +365,12 @@ def daily_run(
             return run_id
 
         aggregator = VotingAggregator()
-        decisions = aggregator.aggregate_for_run(run_id=run_id, votes=all_votes, top_n=10)
+        decisions = aggregator.aggregate_for_run(
+            run_id=run_id,
+            votes=all_votes,
+            top_n=10,
+            min_effective_providers=int(getattr(config, "llm_min_effective_providers", 0) or 0),
+        )
         decision_repo.insert_decisions(decisions)
 
         PaperLedgerService(ledger_repo).record_buys_for_decisions(

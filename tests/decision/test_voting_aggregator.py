@@ -181,6 +181,37 @@ def test_recommendation_synonyms_are_counted_as_buy(rec1: str, rec2: str) -> Non
     assert result["stock"][0]["tier"] == 3
 
 
+def test_thresholds_can_be_relaxed_for_min_effective_providers_2() -> None:
+    """当 min_effective_providers=2 时，应允许 1 票 BUY 进入候选以便联调。"""
+    from decision.voting_aggregator import VotingAggregator
+
+    votes = [
+        {
+            "snapshot_date": "2026-04-15",
+            "instrument_type": "stock",
+            "symbol": "AAPL",
+            "provider": "p1",
+            "recommendation": "BUY",
+            "confidence": 0.8,
+            "rationale": ["r1"],
+        },
+        {
+            "snapshot_date": "2026-04-15",
+            "instrument_type": "stock",
+            "symbol": "AAPL",
+            "provider": "p2",
+            "recommendation": "HOLD",
+            "confidence": 0.6,
+            "rationale": ["r2"],
+        },
+    ]
+
+    result = VotingAggregator().aggregate_top10(votes, top_n=10, min_effective_providers=2)
+    assert len(result["stock"]) == 1
+    assert result["stock"][0]["symbol"] == "AAPL"
+    assert result["stock"][0]["votes"] == 1
+
+
 def test_sorting_is_deterministic_when_input_order_changes() -> None:
     """输入顺序变化时，输出应保持确定性（不依赖 dict/set 遍历顺序）。"""
     from decision.voting_aggregator import VotingAggregator

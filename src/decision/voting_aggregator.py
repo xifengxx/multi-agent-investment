@@ -68,15 +68,31 @@ def _is_buy(recommendation: str) -> bool:
     return rec in {"BUY", "LONG", "STRONG_BUY", "STRONGBUY"}
 
 
-def _tier_for_votes(votes: int) -> Tier | None:
-    """根据 buy 票数计算分层：>=4 -> 1, =3 -> 2, =2 -> 3，其它不入榜。"""
-    if votes >= 4:
+def _tier_for_votes(votes: int, *, thresholds: tuple[int, int, int]) -> Tier | None:
+    """根据 buy 票数计算分层。
+
+    thresholds 含义：
+    - thresholds[0]：tier1 的最小票数（>=）
+    - thresholds[1]：tier2 的最小票数（>=）
+    - thresholds[2]：tier3 的最小票数（>=）
+    """
+    t1, t2, t3 = thresholds
+    if votes >= t1:
         return 1
-    if votes == 3:
+    if votes >= t2:
         return 2
-    if votes == 2:
+    if votes >= t3:
         return 3
     return None
+
+
+def _thresholds_for_min_effective_providers(min_effective_providers: int | None) -> tuple[int, int, int]:
+    """根据最小有效 provider 数返回投票分层阈值。"""
+    if min_effective_providers is None:
+        return (4, 3, 2)
+    if int(min_effective_providers) <= 2:
+        return (2, 1, 1)
+    return (4, 3, 2)
 
 
 def _mean(values: Iterable[float]) -> float | None:
@@ -94,7 +110,13 @@ def _mean(values: Iterable[float]) -> float | None:
 class VotingAggregator:
     """将投票聚合为分层 TopN 决策列表，并分别处理 stock/etf。"""
 
-    def aggregate_top10(self, votes: list[dict[str, Any]] | list[VoteDTO], *, top_n: int = 10) -> dict[str, list[dict[str, Any]]]:
+    def aggregate_top10(
+        self,
+        votes: list[dict[str, Any]] | list[VoteDTO],
+        *,
+        top_n: int = 10,
+        min_effective_providers: int | None = None,
+    ) -> dict[str, list[dict[str, Any]]]:
         """聚合投票并返回按 instrument_type 分组的 TopN 决策列表。
 
         输入：
@@ -110,11 +132,14 @@ class VotingAggregator:
         - summary_rationale: 简要汇总（当前实现为拼接前若干条 rationale）
 
         规则：
-        - 分层：>=4 / =3 / =2
+        - 分层：
+          - 当 min_effective_providers <= 2：>=2 / >=1 / >=1（用于联调）
+          - 默认：>=4 / =3 / =2
         - TopN 补齐：优先 tier1，不足用 tier2，再不足用 tier3，最多 top_n 条
         - 排序确定性：同层先按 votes 降序，再按平均 confidence 降序，最后按 symbol 升序
         """
         normalized_votes = [v if isinstance(v, VoteDTO) else _coerce_vote_dto(v) for v in votes]
+        thresholds = _thresholds_for_min_effective_providers(min_effective_providers)
 
         grouped: dict[tuple[str, str], list[VoteDTO]] = {}
         for vote in normalized_votes:
@@ -124,7 +149,7 @@ class VotingAggregator:
         per_type_candidates: dict[str, list[dict[str, Any]]] = {}
         for (instrument_type, symbol), items in grouped.items():
             buy_votes = sum(1 for v in items if _is_buy(v.recommendation))
-            tier = _tier_for_votes(buy_votes)
+            tier = _tier_for_votes(buy_votes, thresholds=thresholds)
             if tier is None:
                 continue
             confidences = [v.confidence for v in items if isinstance(v.confidence, float)]
@@ -182,13 +207,14 @@ class VotingAggregator:
         run_id: str,
         votes: list[dict[str, Any]] | list[VoteDTO],
         top_n: int = 10,
+        min_effective_providers: int | None = None,
     ) -> list[dict[str, Any]]:
         """聚合投票并产出可直接落库到 decisions 表的记录列表。
 
         输出字段满足 decisions 表 schema：
         - run_id, snapshot_date, instrument_type, symbol, votes, tier, rank_in_list, summary_rationale
         """
-        grouped = self.aggregate_top10(votes, top_n=top_n)
+        grouped = self.aggregate_top10(votes, top_n=top_n, min_effective_providers=min_effective_providers)
         decisions: list[dict[str, Any]] = []
         for instrument_type, items in grouped.items():
             for item in items:
