@@ -46,6 +46,9 @@ def test_load_config_reads_and_converts_env_values(monkeypatch: pytest.MonkeyPat
     monkeypatch.setenv("OPENAI_X_TITLE", "multi_agent_investment")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-anthropic")
     monkeypatch.setenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-latest")
+    monkeypatch.setenv("MINIMAX_API_KEY", "sk-test-minimax")
+    monkeypatch.setenv("MINIMAX_MODEL", "minimax-m2.5")
+    monkeypatch.setenv("MINIMAX_BASE_URL", "https://coding.dashscope.aliyuncs.com/v1")
 
     config = load_config()
 
@@ -69,6 +72,9 @@ def test_load_config_reads_and_converts_env_values(monkeypatch: pytest.MonkeyPat
     assert config.anthropic_api_key == "sk-test-anthropic"
     assert config.anthropic_model == "claude-3-5-sonnet-latest"
     assert config.anthropic_base_url == ""
+    assert config.minimax_api_key == "sk-test-minimax"
+    assert config.minimax_model == "minimax-m2.5"
+    assert config.minimax_base_url == "https://coding.dashscope.aliyuncs.com/v1"
 
 
 def test_load_config_uses_defaults_for_optional_values(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -103,6 +109,9 @@ def test_load_config_uses_defaults_for_optional_values(monkeypatch: pytest.Monke
     monkeypatch.delenv("KIMI_API_KEY", raising=False)
     monkeypatch.delenv("KIMI_MODEL", raising=False)
     monkeypatch.delenv("KIMI_BASE_URL", raising=False)
+    monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
+    monkeypatch.delenv("MINIMAX_MODEL", raising=False)
+    monkeypatch.delenv("MINIMAX_BASE_URL", raising=False)
 
     config = load_config()
 
@@ -121,6 +130,9 @@ def test_load_config_uses_defaults_for_optional_values(monkeypatch: pytest.Monke
     assert config.openai_base_url == ""
     assert config.openai_http_referer == ""
     assert config.openai_x_title == ""
+    assert config.minimax_api_key == ""
+    assert config.minimax_model == ""
+    assert config.minimax_base_url == ""
     assert config.anthropic_api_key == ""
     assert config.anthropic_model == ""
     assert config.anthropic_base_url == ""

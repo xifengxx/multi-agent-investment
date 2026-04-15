@@ -59,6 +59,10 @@ class AppConfig:
     kimi_api_key: str = ""
     kimi_model: str = ""
     kimi_base_url: str = ""
+    # MiniMax
+    minimax_api_key: str = ""
+    minimax_model: str = ""
+    minimax_base_url: str = ""
 
 
 def _read_required_env(key: str) -> str:
@@ -116,7 +120,7 @@ def _read_app_env() -> AppEnv:
     return cast(AppEnv, raw)
 
 
-_ALLOWED_LLM_PROVIDERS: tuple[str, ...] = ("openai", "anthropic", "gemini", "qwen", "glm", "kimi")
+_ALLOWED_LLM_PROVIDERS: tuple[str, ...] = ("openai", "anthropic", "gemini", "qwen", "glm", "kimi", "minimax")
 
 
 def _read_llm_enabled_providers() -> tuple[str, ...]:
@@ -175,6 +179,9 @@ def load_config() -> AppConfig:
     kimi_api_key = _read_str_env("KIMI_API_KEY", default="")
     kimi_model = _read_str_env("KIMI_MODEL", default="")
     kimi_base_url = _read_str_env("KIMI_BASE_URL", default="")
+    minimax_api_key = _read_str_env("MINIMAX_API_KEY", default="")
+    minimax_model = _read_str_env("MINIMAX_MODEL", default="")
+    minimax_base_url = _read_str_env("MINIMAX_BASE_URL", default="")
 
     effective = 0
     for provider in llm_enabled_providers:
@@ -191,6 +198,8 @@ def load_config() -> AppConfig:
         elif provider == "glm" and _is_effective_provider(api_key=glm_api_key, model=glm_model):
             effective += 1
         elif provider == "kimi" and _is_effective_provider(api_key=kimi_api_key, model=kimi_model):
+            effective += 1
+        elif provider == "minimax" and _is_effective_provider(api_key=minimax_api_key, model=minimax_model):
             effective += 1
 
     if llm_min_effective_providers > len(llm_enabled_providers):
@@ -236,5 +245,8 @@ def load_config() -> AppConfig:
         kimi_api_key=kimi_api_key,
         kimi_model=kimi_model,
         kimi_base_url=kimi_base_url,
+        minimax_api_key=minimax_api_key,
+        minimax_model=minimax_model,
+        minimax_base_url=minimax_base_url,
         app_env=_read_app_env(),
     )

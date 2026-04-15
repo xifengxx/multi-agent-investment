@@ -99,6 +99,15 @@ def _build_provider_from_config(
             base_url=config.kimi_base_url,
             base_url_required=True,
         )
+    if name == "minimax":
+        return _build_openai_like_provider(
+            config=config,
+            provider_name="minimax",
+            api_key=config.minimax_api_key,
+            model=config.minimax_model,
+            base_url=config.minimax_base_url,
+            base_url_required=True,
+        )
     if name == "anthropic":
         return _build_simple_provider(
             config=config,

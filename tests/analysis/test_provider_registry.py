@@ -70,9 +70,9 @@ def test_registry_openai_base_url_can_be_empty_and_defaults_to_official() -> Non
     assert getattr(providers[0], "base_url") == "https://api.openai.com/v1"
 
 
-@pytest.mark.parametrize("provider_name", ["qwen", "glm", "kimi"])
+@pytest.mark.parametrize("provider_name", ["qwen", "glm", "kimi", "minimax"])
 def test_registry_openai_compatible_requires_base_url_for_non_openai(provider_name: str) -> None:
-    """Qwen/GLM/Kimi 的 base_url 必填，缺失时应禁用并给出短码原因。"""
+    """Qwen/GLM/Kimi/MiniMax 的 base_url 必填，缺失时应禁用并给出短码原因。"""
     overrides: dict[str, object] = {"llm_enabled_providers": (provider_name,)}
     overrides[f"{provider_name}_api_key"] = "sk-x"
     overrides[f"{provider_name}_model"] = "some-model"
