@@ -37,6 +37,8 @@ class AppConfig:
     openai_api_key: str = ""
     openai_model: str = ""
     openai_base_url: str = ""
+    openai_http_referer: str = ""
+    openai_x_title: str = ""
     # Anthropic
     anthropic_api_key: str = ""
     anthropic_model: str = ""
@@ -156,6 +158,8 @@ def load_config() -> AppConfig:
     openai_api_key = _read_str_env("OPENAI_API_KEY", default="")
     openai_model = _read_str_env("OPENAI_MODEL", default="")
     openai_base_url = _read_str_env("OPENAI_BASE_URL", default="")
+    openai_http_referer = _read_str_env("OPENAI_HTTP_REFERER", default="")
+    openai_x_title = _read_str_env("OPENAI_X_TITLE", default="")
     anthropic_api_key = _read_str_env("ANTHROPIC_API_KEY", default="")
     anthropic_model = _read_str_env("ANTHROPIC_MODEL", default="")
     anthropic_base_url = _read_str_env("ANTHROPIC_BASE_URL", default="")
@@ -215,6 +219,8 @@ def load_config() -> AppConfig:
         openai_api_key=openai_api_key,
         openai_model=openai_model,
         openai_base_url=openai_base_url,
+        openai_http_referer=openai_http_referer,
+        openai_x_title=openai_x_title,
         anthropic_api_key=anthropic_api_key,
         anthropic_model=anthropic_model,
         anthropic_base_url=anthropic_base_url,

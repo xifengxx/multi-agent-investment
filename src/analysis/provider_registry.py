@@ -175,6 +175,18 @@ def _build_openai_like_provider(
     if not normalized_base_url:
         normalized_base_url = _OPENAI_DEFAULT_BASE_URL
 
+    extra_headers: dict[str, str] | None = None
+    if provider_name == "openai":
+        maybe_headers: dict[str, str] = {}
+        http_referer = getattr(config, "openai_http_referer", "").strip()
+        x_title = getattr(config, "openai_x_title", "").strip()
+        if http_referer:
+            maybe_headers["HTTP-Referer"] = http_referer
+        if x_title:
+            maybe_headers["X-Title"] = x_title
+        if maybe_headers:
+            extra_headers = maybe_headers
+
     return (
         OpenAICompatibleProvider(
             base_url=normalized_base_url,
@@ -182,7 +194,7 @@ def _build_openai_like_provider(
             api_key=api_key,
             timeout_seconds=float(config.llm_request_timeout_seconds),
             max_retries=int(config.llm_max_retries),
-            extra_headers=None,
+            extra_headers=extra_headers,
             provider_name=provider_name,
         ),
         None,

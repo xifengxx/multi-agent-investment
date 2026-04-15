@@ -42,6 +42,8 @@ def test_load_config_reads_and_converts_env_values(monkeypatch: pytest.MonkeyPat
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-openai")
     monkeypatch.setenv("OPENAI_MODEL", "gpt-4o-mini")
     monkeypatch.setenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+    monkeypatch.setenv("OPENAI_HTTP_REFERER", "http://localhost")
+    monkeypatch.setenv("OPENAI_X_TITLE", "multi_agent_investment")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-anthropic")
     monkeypatch.setenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-latest")
 
@@ -62,6 +64,8 @@ def test_load_config_reads_and_converts_env_values(monkeypatch: pytest.MonkeyPat
     assert config.openai_api_key == "sk-test-openai"
     assert config.openai_model == "gpt-4o-mini"
     assert config.openai_base_url == "https://api.openai.com/v1"
+    assert config.openai_http_referer == "http://localhost"
+    assert config.openai_x_title == "multi_agent_investment"
     assert config.anthropic_api_key == "sk-test-anthropic"
     assert config.anthropic_model == "claude-3-5-sonnet-latest"
     assert config.anthropic_base_url == ""
@@ -115,6 +119,8 @@ def test_load_config_uses_defaults_for_optional_values(monkeypatch: pytest.Monke
     assert config.openai_api_key == ""
     assert config.openai_model == ""
     assert config.openai_base_url == ""
+    assert config.openai_http_referer == ""
+    assert config.openai_x_title == ""
     assert config.anthropic_api_key == ""
     assert config.anthropic_model == ""
     assert config.anthropic_base_url == ""
