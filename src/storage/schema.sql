@@ -66,3 +66,24 @@ CREATE TABLE IF NOT EXISTS llm_outputs (
 
 CREATE INDEX IF NOT EXISTS idx_llm_outputs_lookup
 ON llm_outputs(run_id, snapshot_date, instrument_type, symbol);
+
+CREATE TABLE IF NOT EXISTS decisions (
+    decision_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL,
+    snapshot_date TEXT NOT NULL,
+    instrument_type TEXT NOT NULL CHECK (instrument_type IN ('stock', 'etf')),
+    symbol TEXT NOT NULL,
+    votes INTEGER NOT NULL,
+    tier INTEGER NOT NULL CHECK (tier IN (1, 2, 3)),
+    rank_in_list INTEGER NOT NULL,
+    summary_rationale TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 决策查询通常按 run_id+日期+类型读取榜单
+CREATE INDEX IF NOT EXISTS idx_decisions_run_lookup
+ON decisions(run_id, snapshot_date, instrument_type, rank_in_list);
+
+-- 方便按标的回溯决策记录
+CREATE INDEX IF NOT EXISTS idx_decisions_symbol_lookup
+ON decisions(snapshot_date, instrument_type, symbol);
