@@ -6,6 +6,7 @@ import argparse
 
 from app.config import AppConfig, load_config
 from common.types import RunMode
+from orchestrator.run_orchestrator import daily_run
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -16,8 +17,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def run(mode: RunMode, config: AppConfig) -> int:
-    """执行入口逻辑（Task1 仅做占位返回）。"""
+    """执行入口逻辑。"""
     print(f"mode={mode}, env={config.app_env}, dry_run={config.dry_run}")
+    if mode == "daily":
+        run_id = daily_run(config=config, snapshot_date=None, providers=None, dry_run=config.dry_run)
+        print(f"daily run_id={run_id}")
+        return 0
+    if mode == "weekly":
+        print("weekly orchestrator: TODO (占位)")
+        return 0
     return 0
 
 

@@ -43,3 +43,27 @@ class RunRepository:
             (run_id,),
         ).fetchone()
         return row
+
+    def mark_run_end(
+        self,
+        *,
+        run_id: str,
+        status: str,
+        ended_at: str,
+        error_message: str | None,
+    ) -> None:
+        """更新 runs 的结束状态与结束时间。
+
+        约定：
+        - status 应为 schema 允许的枚举值（RUNNING/SUCCEEDED/FAILED/DEGRADED）
+        - ended_at 由上层生成 ISO 字符串（或任何可读时间戳），仓储不做解析
+        """
+        with self._connection:
+            self._connection.execute(
+                """
+                UPDATE runs
+                SET status = ?, ended_at = ?, error_message = ?
+                WHERE run_id = ?
+                """,
+                (status, ended_at, error_message, run_id),
+            )
