@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from analysis.llm_invoke_engine import build_llm_invoke_engine
+from analysis.provider_registry import ProviderRegistry
 from analysis.providers.base import BaseLLMProvider
 from app.config import AppConfig
 from decision.voting_aggregator import VotingAggregator
@@ -97,6 +98,45 @@ def _votes_from_engine_results(
     return votes
 
 
+def _resolve_providers(
+    *,
+    config: AppConfig,
+    providers: list[BaseLLMProvider] | None,
+) -> tuple[list[BaseLLMProvider], dict[str, str]]:
+    """解析本次运行要使用的 provider 列表。
+
+    约定：
+    - 若显式传入 providers：视为“完全注入”，跳过 ProviderRegistry（常用于测试/本地 mock）。
+    - 若未传入 providers：按 config.llm_enabled_providers 走 ProviderRegistry，得到
+      (enabled_providers, disabled_reasons) 供降级通知审计使用。
+    """
+    if providers is not None:
+        return list(providers), {}
+    registry = ProviderRegistry.from_config(config)
+    enabled, disabled = registry.enabled_providers()
+    return enabled, disabled
+
+
+def _format_degraded_message(
+    *,
+    run_id: str,
+    min_required: int,
+    effective_count: int,
+    candidates: tuple[str, ...],
+    disabled_reasons: dict[str, str],
+) -> str:
+    """构造降级通知消息文本（不得包含敏感信息）。"""
+    disabled_part = ", ".join(f"{name}:{reason}" for name, reason in sorted(disabled_reasons.items()))
+    candidates_part = ", ".join(candidates) if candidates else "(empty)"
+    return (
+        f"Run {run_id} DEGRADED: providers_insufficient\n"
+        f"- min_required={min_required}\n"
+        f"- effective={effective_count}\n"
+        f"- candidates=[{candidates_part}]\n"
+        f"- disabled=[{disabled_part or '(none)'}]"
+    )
+
+
 def daily_run(
     config: AppConfig,
     snapshot_date: str | None = None,
@@ -121,10 +161,11 @@ def daily_run(
     - 尝试发送失败通知（dry_run 时也会记录）
 
     降级分支：
-    - provider 数不足（<3）-> runs: mark_run_end(DEGRADED)；不做决策/推送，只入库
+    - effective provider 数不足（< config.llm_min_effective_providers）-> runs: mark_run_end(DEGRADED)
+      并写入降级通知（dry_run 也记录）；不做输入扫描/LLM/决策/记账
     """
     effective_dry_run = config.dry_run if dry_run is None else bool(dry_run)
-    provider_list = providers or []
+    provider_list, disabled_reasons = _resolve_providers(config=config, providers=providers)
 
     run_id = f"run-{uuid.uuid4().hex}"
     started_at = _now_iso()
@@ -146,6 +187,51 @@ def daily_run(
             status="RUNNING",
             started_at=started_at,
         )
+
+        # providers 不足时：仅落库 runs + notifications，然后直接结束。
+        min_required = int(getattr(config, "llm_min_effective_providers", 0) or 0)
+        if min_required > 0 and len(provider_list) < min_required:
+            message_text = _format_degraded_message(
+                run_id=run_id,
+                min_required=min_required,
+                effective_count=len(provider_list),
+                candidates=tuple(getattr(config, "llm_enabled_providers", ()) or ()),
+                disabled_reasons=disabled_reasons,
+            )
+            try:
+                adapter = TelegramAdapter(
+                    bot_token=config.telegram_bot_token,
+                    chat_id=config.telegram_chat_id,
+                    dry_run=effective_dry_run,
+                )
+                response = adapter.send_message(text=message_text)
+                sent_ok = bool(response.get("ok"))
+                notification_repo.insert_notification(
+                    run_id=run_id,
+                    channel="telegram",
+                    message_text=message_text,
+                    dry_run=effective_dry_run,
+                    status="SENT" if sent_ok else "FAILED",
+                    provider_response_json=json.dumps(response, ensure_ascii=False),
+                )
+            except Exception as notify_exc:
+                # 降级通知失败也要尽可能落库，便于审计
+                notification_repo.insert_notification(
+                    run_id=run_id,
+                    channel="telegram",
+                    message_text=message_text,
+                    dry_run=effective_dry_run,
+                    status="FAILED",
+                    provider_response_json=json.dumps({"error": str(notify_exc)}, ensure_ascii=False),
+                )
+
+            run_repo.mark_run_end(
+                run_id=run_id,
+                status="DEGRADED",
+                ended_at=_now_iso(),
+                error_message=f"providers_insufficient:{len(provider_list)}/{min_required}",
+            )
+            return run_id
 
         resolved_snapshot_date, validated_pair = _pick_validated_file_pair(
             data_root=config.data_root, snapshot_date=snapshot_date
@@ -195,16 +281,6 @@ def daily_run(
                     engine_results=etf_results,
                 )
             )
-
-        # providers 不足时，允许完整入库（含 llm_outputs），但不做决策/推送。
-        if len(provider_list) < 3:
-            RunRepository(conn).mark_run_end(
-                run_id=run_id,
-                status="DEGRADED",
-                ended_at=_now_iso(),
-                error_message=f"providers_insufficient:{len(provider_list)}",
-            )
-            return run_id
 
         aggregator = VotingAggregator()
         decisions = aggregator.aggregate_for_run(run_id=run_id, votes=all_votes, top_n=10)
