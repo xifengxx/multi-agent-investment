@@ -49,3 +49,20 @@ CREATE TABLE IF NOT EXISTS instrument_snapshots (
 
 CREATE INDEX IF NOT EXISTS idx_instrument_snapshots_lookup
 ON instrument_snapshots(snapshot_date, instrument_type, symbol);
+
+CREATE TABLE IF NOT EXISTS llm_outputs (
+    output_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL,
+    snapshot_date TEXT NOT NULL,
+    instrument_type TEXT NOT NULL CHECK (instrument_type IN ('stock', 'etf')),
+    symbol TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    raw_text TEXT NOT NULL,
+    json_text TEXT,
+    is_valid INTEGER NOT NULL CHECK (is_valid IN (0, 1)),
+    quality_flags TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_llm_outputs_lookup
+ON llm_outputs(run_id, snapshot_date, instrument_type, symbol);
