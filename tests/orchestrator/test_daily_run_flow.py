@@ -179,3 +179,45 @@ def test_daily_run_flow_persists_all_tables(tmp_path: Path) -> None:
         assert int(notifications_count) == 1
         assert int(trades_count) == 4
         assert int(positions_count) == 4
+
+
+def test_daily_run_sets_runs_snapshot_date_when_not_provided(tmp_path: Path) -> None:
+    """当未显式传入 snapshot_date 时，应将解析出的日期写回 runs.snapshot_date。"""
+    data_root = tmp_path / "data_root"
+    data_root.mkdir(parents=True, exist_ok=True)
+
+    snapshot_date = "2026-04-15"
+    stock_file = data_root / f"{snapshot_date}_stock.xlsx"
+    etf_file = data_root / f"{snapshot_date}_etf.xlsx"
+
+    _write_minimal_xlsx(stock_file, rows=[{"Symbol": "AAPL", "Description": "Apple Inc."}])
+    _write_minimal_xlsx(etf_file, rows=[{"Symbol": "SPY", "Description": "SPDR S&P 500 ETF"}])
+
+    db_path = tmp_path / "app.db"
+    config = AppConfig(
+        telegram_bot_token="x",
+        telegram_chat_id="x",
+        data_root=str(data_root),
+        sqlite_path=str(db_path),
+        analysis_parallelism=1,
+        dry_run=True,
+        app_env="test",
+    )
+
+    run_id = daily_run(
+        config=config,
+        snapshot_date=None,
+        providers=[_NamedMockProvider("p1"), _NamedMockProvider("p2"), _NamedMockProvider("p3")],
+        dry_run=True,
+    )
+
+    conn = open_sqlite_connection(db_path)
+    try:
+        run_row = conn.execute("SELECT * FROM runs WHERE run_id = ?", (run_id,)).fetchone()
+        assert run_row is not None
+        batch_row = conn.execute("SELECT snapshot_date FROM file_batches WHERE run_id = ?", (run_id,)).fetchone()
+        assert batch_row is not None
+    finally:
+        conn.close()
+
+    assert run_row["snapshot_date"] == batch_row["snapshot_date"]

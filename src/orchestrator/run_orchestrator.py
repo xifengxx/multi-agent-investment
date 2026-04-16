@@ -244,6 +244,7 @@ def daily_run(
         resolved_snapshot_date, validated_pair = _pick_validated_file_pair(
             data_root=config.data_root, snapshot_date=snapshot_date
         )
+        run_repo.set_snapshot_date(run_id=run_id, snapshot_date=resolved_snapshot_date)
 
         stock_rows, etf_rows = parse_validated_file_pair(validated_pair)
         stock_rows = _apply_instrument_limit(

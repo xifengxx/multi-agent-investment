@@ -67,3 +67,15 @@ class RunRepository:
                 """,
                 (status, ended_at, error_message, run_id),
             )
+
+    def set_snapshot_date(self, *, run_id: str, snapshot_date: str) -> None:
+        """为指定 run_id 写入 snapshot_date。"""
+        with self._connection:
+            self._connection.execute(
+                """
+                UPDATE runs
+                SET snapshot_date = ?
+                WHERE run_id = ?
+                """,
+                (snapshot_date, run_id),
+            )
