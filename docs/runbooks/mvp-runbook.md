@@ -45,6 +45,7 @@ python -m pip install openpyxl pytest
 - `DATA_ROOT`：输入数据目录，默认 `stock_data`
 - `SQLITE_PATH`：SQLite DB 文件路径，默认 `data/app.db`
 - `ANALYSIS_PARALLELISM`：分析并发数，默认 `3`
+- `LLM_MAX_INSTRUMENTS_PER_TYPE`：单次运行每类（stock/etf）最多分析的标的数，默认 `20`
 - `DRY_RUN`：是否 dry run，默认 `false`（可用 `1/true/yes/on`）
 - `APP_ENV`：`dev/test/prod`，默认 `dev`
 
@@ -83,17 +84,21 @@ export ANALYSIS_PARALLELISM="3"
 - Qwen（OpenAI-compatible）：`QWEN_API_KEY / QWEN_MODEL / QWEN_BASE_URL(必填)`
 - GLM（OpenAI-compatible）：`GLM_API_KEY / GLM_MODEL / GLM_BASE_URL(必填)`
 - Kimi（OpenAI-compatible）：`KIMI_API_KEY / KIMI_MODEL / KIMI_BASE_URL(必填)`
+- MiniMax（OpenAI-compatible）：`MINIMAX_API_KEY / MINIMAX_MODEL / MINIMAX_BASE_URL(必填)`
 
 示例（占位符请替换为你自己的值；`*_BASE_URL` 以各厂商官方文档为准）：
 
 ```bash
 export LLM_ENABLED_PROVIDERS="openai,anthropic,gemini,qwen,glm,kimi"
 export LLM_MIN_EFFECTIVE_PROVIDERS="3"
+export LLM_MAX_INSTRUMENTS_PER_TYPE="20"
 
 # OpenAI
 export OPENAI_API_KEY="sk-..."
 export OPENAI_MODEL="gpt-4.1-mini"
 export OPENAI_BASE_URL="https://api.openai.com/v1"
+export OPENAI_HTTP_REFERER="http://localhost"   # 可选：OpenRouter 常用
+export OPENAI_X_TITLE="multi_agent_investment"  # 可选：OpenRouter 常用
 
 # Anthropic
 export ANTHROPIC_API_KEY="sk-ant-..."
@@ -117,6 +122,15 @@ export GLM_BASE_URL="https://open.bigmodel.cn/api/paas/v4"  # 示例
 export KIMI_API_KEY="..."
 export KIMI_MODEL="moonshot-v1-8k"
 export KIMI_BASE_URL="https://api.moonshot.cn/v1"
+
+# MiniMax（OpenAI-compatible）
+export MINIMAX_API_KEY="..."
+export MINIMAX_MODEL="MiniMax-M2.5"
+export MINIMAX_BASE_URL="https://api.example.com/v1"  # 示例
+
+联调期建议：
+
+- 当 `LLM_MIN_EFFECTIVE_PROVIDERS <= 2` 时，投票门槛会放宽（允许 1 票 BUY 进入榜单），便于先跑通全链路；当你把门槛调回 `>=3` 时会自动恢复更严格的默认规则（>=4/=3/=2）。
 ```
 
 ---

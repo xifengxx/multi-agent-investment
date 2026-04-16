@@ -34,13 +34,18 @@ export APP_ENV="test"
 
 ## 可选：启用真实 LLM Providers（配置驱动）
 
-支持的 provider：`openai / anthropic / gemini / qwen / glm / kimi`。
+支持的 provider：`openai / anthropic / gemini / qwen / glm / kimi / minimax`。
 
 关键环境变量：
 
 - `LLM_ENABLED_PROVIDERS`：逗号分隔的候选 provider 列表（顺序即调用顺序，例如 `openai,anthropic,gemini`）。
 - `LLM_MIN_EFFECTIVE_PROVIDERS`：本次运行至少需要的“有效 provider”数量；不足时会标记为 `DEGRADED` 并仅记录降级通知。
   - “有效 provider” = 具备最小调用所需字段（通常为 `*_API_KEY + *_MODEL`；其中 `qwen/glm/kimi` 还要求 `*_BASE_URL` 非空）。
+- `LLM_MAX_INSTRUMENTS_PER_TYPE`：单次运行每类（stock/etf）最多分析的标的数（用于联调/控成本），默认 `20`。
+
+联调期提示：
+
+- 当 `LLM_MIN_EFFECTIVE_PROVIDERS <= 2` 时，投票门槛会放宽（允许 1 票 BUY 进入榜单），便于先把全链路跑通；当你把门槛调回 `>=3` 时会自动恢复更严格的默认规则。
 
 安全提示：
 
@@ -58,6 +63,8 @@ export LLM_MIN_EFFECTIVE_PROVIDERS="3"
 export OPENAI_API_KEY="sk-..."
 export OPENAI_MODEL="gpt-4.1-mini"
 export OPENAI_BASE_URL="https://api.openai.com/v1"
+export OPENAI_HTTP_REFERER="http://localhost"   # 可选：OpenRouter 常用
+export OPENAI_X_TITLE="multi_agent_investment"  # 可选：OpenRouter 常用
 
 # Anthropic
 export ANTHROPIC_API_KEY="sk-ant-..."
@@ -79,6 +86,11 @@ export GLM_BASE_URL="https://open.bigmodel.cn/api/paas/v4"  # 示例
 export KIMI_API_KEY="..."
 export KIMI_MODEL="moonshot-v1-8k"
 export KIMI_BASE_URL="https://api.moonshot.cn/v1"
+
+# MiniMax（OpenAI-compatible）
+export MINIMAX_API_KEY="..."
+export MINIMAX_MODEL="MiniMax-M2.5"
+export MINIMAX_BASE_URL="https://api.example.com/v1"  # 示例
 ```
 
 运行最小 E2E（会在 tmp_path 生成一对 xlsx，跑完整 daily 流水线并断言落库表行数）：
