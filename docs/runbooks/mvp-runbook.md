@@ -95,7 +95,7 @@ export LLM_MAX_INSTRUMENTS_PER_TYPE="20"
 
 # OpenAI
 export OPENAI_API_KEY="sk-..."
-export OPENAI_MODEL="gpt-4.1-mini"
+export OPENAI_MODEL="openai/gpt-oss-20b"  # OpenRouter 示例：如遇地区不可用，优先改用可用模型（可用列表见 /models）
 export OPENAI_BASE_URL="https://api.openai.com/v1"
 export OPENAI_HTTP_REFERER="http://localhost"   # 可选：OpenRouter 常用
 export OPENAI_X_TITLE="multi_agent_investment"  # 可选：OpenRouter 常用
