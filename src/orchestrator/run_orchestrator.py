@@ -188,6 +188,8 @@ def daily_run(
         ledger_repo = LedgerRepository(conn)
         notification_repo = NotificationRepository(conn)
 
+        run_repo.mark_stale_running_runs_failed(now_iso=started_at, max_age_seconds=7200)
+
         run_repo.create_run(
             run_id=run_id,
             trigger_type="manual_daily",
@@ -480,6 +482,8 @@ def weekly_run(
         run_repo = RunRepository(conn)
         notification_repo = NotificationRepository(conn)
         review_repo = ReviewRepository(conn)
+
+        run_repo.mark_stale_running_runs_failed(now_iso=started_at, max_age_seconds=7200)
 
         run_repo.create_run(
             run_id=run_id,

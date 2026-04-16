@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import sqlite3
 
 
@@ -79,3 +80,45 @@ class RunRepository:
                 """,
                 (snapshot_date, run_id),
             )
+
+    def mark_stale_running_runs_failed(self, *, now_iso: str, max_age_seconds: int) -> int:
+        """将启动过久的 RUNNING runs 标记为 FAILED，返回更新条数。"""
+        now = datetime.fromisoformat(now_iso)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=timezone.utc)
+
+        rows = self._connection.execute(
+            """
+            SELECT run_id, started_at
+            FROM runs
+            WHERE status = 'RUNNING'
+              AND ended_at IS NULL
+            """,
+        ).fetchall()
+
+        stale_run_ids: list[str] = []
+        for row in rows:
+            started_at_raw = str(row["started_at"] or "")
+            if not started_at_raw:
+                continue
+            started_at = datetime.fromisoformat(started_at_raw)
+            if started_at.tzinfo is None:
+                started_at = started_at.replace(tzinfo=timezone.utc)
+            age_seconds = (now - started_at).total_seconds()
+            if age_seconds > float(max_age_seconds):
+                stale_run_ids.append(str(row["run_id"]))
+
+        if not stale_run_ids:
+            return 0
+
+        with self._connection:
+            for rid in stale_run_ids:
+                self._connection.execute(
+                    """
+                    UPDATE runs
+                    SET status = 'FAILED', ended_at = ?, error_message = ?
+                    WHERE run_id = ?
+                    """,
+                    (now_iso, "stale_run", rid),
+                )
+        return len(stale_run_ids)
