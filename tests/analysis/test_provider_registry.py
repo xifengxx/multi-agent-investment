@@ -14,6 +14,7 @@ if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
 from app.config import AppConfig  # noqa: E402
+from analysis.providers.mock_provider import MockLLMProvider  # noqa: E402
 from analysis.provider_registry import ProviderRegistry  # noqa: E402
 
 
@@ -100,3 +101,16 @@ def test_registry_anthropic_and_gemini_do_not_require_base_url(provider_name: st
 
     assert disabled == {}
     assert [p.name for p in providers] == [provider_name]
+
+
+def test_provider_capability_default_flags() -> None:
+    """默认 provider 不支持文件输入能力。"""
+    provider = MockLLMProvider()
+    assert provider.supports_file_input is False
+
+
+def test_provider_invoke_with_files_default_raises_not_implemented() -> None:
+    """默认 invoke_with_files 应明确抛出未实现异常。"""
+    provider = MockLLMProvider()
+    with pytest.raises(NotImplementedError, match="file_input_not_supported"):
+        provider.invoke_with_files(prompt="hello", file_paths=["/tmp/demo.xlsx"])

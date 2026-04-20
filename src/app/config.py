@@ -33,6 +33,17 @@ class AppConfig:
     llm_request_timeout_seconds: int = 30
     llm_max_retries: int = 2
     llm_max_instruments_per_type: int = 20
+    llm_provider_input_mode_overrides: tuple[tuple[str, str], ...] = ()
+    panel_max_sheets: int = 60
+    panel_prompt_path: str = ""
+    panel_fallback_max_symbols: int = 120
+    panel_fallback_max_points_per_symbol: int = 6
+    reports_base_url: str = "http://127.0.0.1:8888"
+    api_token: str = ""
+    web_bind_host: str = "127.0.0.1"
+    web_port: int = 8000
+    worker_poll_interval_seconds: int = 2
+    worker_max_attempts: int = 3
     # OpenAI
     openai_api_key: str = ""
     openai_model: str = ""
@@ -121,6 +132,7 @@ def _read_app_env() -> AppEnv:
 
 
 _ALLOWED_LLM_PROVIDERS: tuple[str, ...] = ("openai", "anthropic", "gemini", "qwen", "glm", "kimi", "minimax")
+_ALLOWED_LLM_PROVIDER_INPUT_MODES: tuple[str, ...] = ("file_first", "summary_only", "file_only")
 
 
 def _read_llm_enabled_providers() -> tuple[str, ...]:
@@ -145,6 +157,32 @@ def _read_llm_enabled_providers() -> tuple[str, ...]:
     return tuple(providers)
 
 
+def _read_llm_provider_input_mode_overrides() -> tuple[tuple[str, str], ...]:
+    raw = os.getenv("LLM_PROVIDER_INPUT_MODE_OVERRIDES", "").strip()
+    if not raw:
+        return ()
+    allowed_providers = set(_ALLOWED_LLM_PROVIDERS)
+    allowed_modes = set(_ALLOWED_LLM_PROVIDER_INPUT_MODES)
+    items: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for part in raw.split(","):
+        seg = part.strip()
+        if not seg:
+            continue
+        if ":" not in seg:
+            raise ConfigError(f"LLM_PROVIDER_INPUT_MODE_OVERRIDES 格式不合法: {seg}")
+        provider, mode = [s.strip().lower() for s in seg.split(":", 1)]
+        if provider not in allowed_providers:
+            raise ConfigError(f"LLM_PROVIDER_INPUT_MODE_OVERRIDES 包含不支持的 provider: {provider}")
+        if mode not in allowed_modes:
+            raise ConfigError(f"LLM_PROVIDER_INPUT_MODE_OVERRIDES mode 不支持: {mode}")
+        if provider in seen:
+            continue
+        seen.add(provider)
+        items.append((provider, mode))
+    return tuple(items)
+
+
 def _is_effective_provider(*, api_key: str, model: str) -> bool:
     """判断 provider 配置是否“可用”（具备最小调用所需字段）。"""
     return bool(api_key.strip()) and bool(model.strip())
@@ -158,6 +196,20 @@ def load_config() -> AppConfig:
     llm_request_timeout_seconds = _read_int_env("LLM_REQUEST_TIMEOUT_SECONDS", default=30)
     llm_max_retries = _read_non_negative_int_env("LLM_MAX_RETRIES", default=2)
     llm_max_instruments_per_type = _read_non_negative_int_env("LLM_MAX_INSTRUMENTS_PER_TYPE", default=20)
+    llm_provider_input_mode_overrides = _read_llm_provider_input_mode_overrides()
+    panel_max_sheets = _read_non_negative_int_env("PANEL_MAX_SHEETS", default=60)
+    panel_prompt_path = _read_str_env("PANEL_PROMPT_PATH", default="")
+    panel_fallback_max_symbols = _read_non_negative_int_env("PANEL_FALLBACK_MAX_SYMBOLS", default=120)
+    panel_fallback_max_points_per_symbol = _read_non_negative_int_env(
+        "PANEL_FALLBACK_MAX_POINTS_PER_SYMBOL", default=6
+    )
+
+    reports_base_url = _read_str_env("REPORTS_BASE_URL", default="http://127.0.0.1:8888")
+    api_token = _read_str_env("API_TOKEN", default="")
+    web_bind_host = _read_str_env("WEB_BIND_HOST", default="127.0.0.1")
+    web_port = _read_non_negative_int_env("WEB_PORT", default=8000)
+    worker_poll_interval_seconds = _read_non_negative_int_env("WORKER_POLL_INTERVAL_SECONDS", default=2)
+    worker_max_attempts = _read_non_negative_int_env("WORKER_MAX_ATTEMPTS", default=3)
 
     openai_api_key = _read_str_env("OPENAI_API_KEY", default="")
     openai_model = _read_str_env("OPENAI_MODEL", default="")
@@ -225,6 +277,17 @@ def load_config() -> AppConfig:
         llm_request_timeout_seconds=llm_request_timeout_seconds,
         llm_max_retries=llm_max_retries,
         llm_max_instruments_per_type=llm_max_instruments_per_type,
+        llm_provider_input_mode_overrides=llm_provider_input_mode_overrides,
+        panel_max_sheets=panel_max_sheets,
+        panel_prompt_path=panel_prompt_path,
+        panel_fallback_max_symbols=panel_fallback_max_symbols,
+        panel_fallback_max_points_per_symbol=panel_fallback_max_points_per_symbol,
+        reports_base_url=reports_base_url,
+        api_token=api_token,
+        web_bind_host=web_bind_host,
+        web_port=web_port,
+        worker_poll_interval_seconds=worker_poll_interval_seconds,
+        worker_max_attempts=worker_max_attempts,
         openai_api_key=openai_api_key,
         openai_model=openai_model,
         openai_base_url=openai_base_url,

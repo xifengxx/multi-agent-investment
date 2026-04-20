@@ -50,6 +50,24 @@ CREATE TABLE IF NOT EXISTS instrument_snapshots (
 CREATE INDEX IF NOT EXISTS idx_instrument_snapshots_lookup
 ON instrument_snapshots(snapshot_date, instrument_type, symbol);
 
+CREATE TABLE IF NOT EXISTS llm_reports (
+    report_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL,
+    snapshot_date TEXT NOT NULL,
+    instrument_type TEXT NOT NULL CHECK (instrument_type IN ('stock', 'etf')),
+    provider TEXT NOT NULL,
+    raw_text TEXT NOT NULL,
+    json_text TEXT,
+    is_valid INTEGER NOT NULL CHECK (is_valid IN (0, 1)),
+    quality_flags TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (run_id) REFERENCES runs(run_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_llm_reports_run_id ON llm_reports(run_id);
+CREATE INDEX IF NOT EXISTS idx_llm_reports_lookup
+ON llm_reports(run_id, snapshot_date, instrument_type, provider);
+
 CREATE TABLE IF NOT EXISTS llm_outputs (
     output_id INTEGER PRIMARY KEY AUTOINCREMENT,
     run_id TEXT NOT NULL,
@@ -153,3 +171,27 @@ CREATE TABLE IF NOT EXISTS provider_scores (
 );
 
 CREATE INDEX IF NOT EXISTS idx_provider_scores_updated_at ON provider_scores(updated_at);
+
+-- Job Queue（Web 上传后入队，Worker 抢占执行）
+CREATE TABLE IF NOT EXISTS jobs (
+    job_id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    snapshot_date TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('PENDING', 'RUNNING', 'DONE', 'FAILED')),
+    attempts INTEGER NOT NULL DEFAULT 0,
+    locked_by TEXT,
+    locked_at TEXT,
+    last_error TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (run_id) REFERENCES runs(run_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_jobs_status_created_at ON jobs(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_jobs_snapshot_date ON jobs(snapshot_date);
+
+-- 同一 snapshot_date 互斥锁
+CREATE TABLE IF NOT EXISTS snapshot_locks (
+    snapshot_date TEXT PRIMARY KEY,
+    locked_by TEXT NOT NULL,
+    locked_at TEXT NOT NULL
+);

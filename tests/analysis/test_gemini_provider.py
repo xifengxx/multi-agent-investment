@@ -99,3 +99,48 @@ def test_invoke_raises_and_does_not_leak_api_key_even_if_url_in_error() -> None:
 
     assert api_key not in str(excinfo.value)
     assert "boom" in str(excinfo.value)
+
+
+def test_invoke_with_files_uses_inline_file_parts_and_prompt(tmp_path: Path) -> None:
+    """invoke_with_files 应先上传文件获取 file_uri，再在 generateContent 引用 file_uri。"""
+    provider = GeminiProvider(
+        model="gemini-1.5-flash",
+        api_key="AIza-VERY-SECRET",
+        timeout_seconds=3,
+    )
+
+    xlsx_path = tmp_path / "sample.xlsx"
+    file_bytes = b"fake-xlsx-binary"
+    xlsx_path.write_bytes(file_bytes)
+
+    def _fake_upload_start_response() -> object:
+        def _read() -> bytes:
+            return b"{}"
+
+        headers = {"x-goog-upload-url": "https://upload.example/upload-session"}
+        return SimpleNamespace(read=_read, headers=headers)
+
+    def _fake_upload_finalize_response() -> object:
+        return _fake_http_response(payload={"file": {"uri": "files/abc123"}})
+
+    urlopen_mock = Mock(
+        side_effect=[
+            _fake_upload_start_response(),
+            _fake_upload_finalize_response(),
+            _fake_http_response(payload={"candidates": [{"content": {"parts": [{"text": "ok"}]}}]}),
+        ]
+    )
+    with patch("urllib.request.urlopen", urlopen_mock):
+        text = provider.invoke_with_files(prompt="analyze now", file_paths=[str(xlsx_path)])
+
+    assert provider.supports_file_input is True
+    assert text == "ok"
+    assert urlopen_mock.call_count == 3
+
+    request = urlopen_mock.call_args_list[2].args[0]
+    sent = json.loads(request.data.decode("utf-8"))
+    parts = sent["contents"][0]["parts"]
+    assert parts[0]["text"] == "analyze now"
+    assert "inlineData" not in parts[1]
+    assert parts[1]["file_data"]["mime_type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    assert parts[1]["file_data"]["file_uri"] == "files/abc123"

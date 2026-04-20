@@ -49,6 +49,11 @@ def test_load_config_reads_and_converts_env_values(monkeypatch: pytest.MonkeyPat
     monkeypatch.setenv("MINIMAX_API_KEY", "sk-test-minimax")
     monkeypatch.setenv("MINIMAX_MODEL", "minimax-m2.5")
     monkeypatch.setenv("MINIMAX_BASE_URL", "https://coding.dashscope.aliyuncs.com/v1")
+    monkeypatch.setenv("PANEL_MAX_SHEETS", "80")
+    monkeypatch.setenv("PANEL_PROMPT_PATH", "/tmp/panel_prompt.txt")
+    monkeypatch.setenv("PANEL_FALLBACK_MAX_SYMBOLS", "120")
+    monkeypatch.setenv("PANEL_FALLBACK_MAX_POINTS_PER_SYMBOL", "6")
+    monkeypatch.setenv("LLM_PROVIDER_INPUT_MODE_OVERRIDES", "glm:summary_only,minimax:summary_only")
 
     config = load_config()
 
@@ -75,6 +80,11 @@ def test_load_config_reads_and_converts_env_values(monkeypatch: pytest.MonkeyPat
     assert config.minimax_api_key == "sk-test-minimax"
     assert config.minimax_model == "minimax-m2.5"
     assert config.minimax_base_url == "https://coding.dashscope.aliyuncs.com/v1"
+    assert config.panel_max_sheets == 80
+    assert config.panel_prompt_path == "/tmp/panel_prompt.txt"
+    assert config.panel_fallback_max_symbols == 120
+    assert config.panel_fallback_max_points_per_symbol == 6
+    assert config.llm_provider_input_mode_overrides == (("glm", "summary_only"), ("minimax", "summary_only"))
 
 
 def test_load_config_uses_defaults_for_optional_values(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -112,6 +122,12 @@ def test_load_config_uses_defaults_for_optional_values(monkeypatch: pytest.Monke
     monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
     monkeypatch.delenv("MINIMAX_MODEL", raising=False)
     monkeypatch.delenv("MINIMAX_BASE_URL", raising=False)
+    monkeypatch.delenv("PANEL_MAX_SHEETS", raising=False)
+    monkeypatch.delenv("PANEL_PROMPT_PATH", raising=False)
+    monkeypatch.delenv("PANEL_FALLBACK_MAX_SYMBOLS", raising=False)
+    monkeypatch.delenv("PANEL_FALLBACK_MAX_POINTS_PER_SYMBOL", raising=False)
+    monkeypatch.delenv("LLM_PROVIDER_INPUT_MODE_OVERRIDES", raising=False)
+    monkeypatch.delenv("REPORTS_BASE_URL", raising=False)
 
     config = load_config()
 
@@ -133,6 +149,12 @@ def test_load_config_uses_defaults_for_optional_values(monkeypatch: pytest.Monke
     assert config.minimax_api_key == ""
     assert config.minimax_model == ""
     assert config.minimax_base_url == ""
+    assert config.panel_max_sheets == 60
+    assert config.panel_prompt_path == ""
+    assert config.panel_fallback_max_symbols == 120
+    assert config.panel_fallback_max_points_per_symbol == 6
+    assert config.llm_provider_input_mode_overrides == ()
+    assert config.reports_base_url == "http://127.0.0.1:8888"
     assert config.anthropic_api_key == ""
     assert config.anthropic_model == ""
     assert config.anthropic_base_url == ""
@@ -166,6 +188,13 @@ def test_load_config_uses_defaults_for_optional_values(monkeypatch: pytest.Monke
         ("LLM_MAX_RETRIES", "abc"),
         ("LLM_MAX_INSTRUMENTS_PER_TYPE", "-1"),
         ("LLM_MAX_INSTRUMENTS_PER_TYPE", "abc"),
+        ("PANEL_FALLBACK_MAX_SYMBOLS", "-1"),
+        ("PANEL_FALLBACK_MAX_SYMBOLS", "abc"),
+        ("PANEL_FALLBACK_MAX_POINTS_PER_SYMBOL", "-1"),
+        ("PANEL_FALLBACK_MAX_POINTS_PER_SYMBOL", "abc"),
+        ("LLM_PROVIDER_INPUT_MODE_OVERRIDES", "badformat"),
+        ("LLM_PROVIDER_INPUT_MODE_OVERRIDES", "unknown:summary_only"),
+        ("LLM_PROVIDER_INPUT_MODE_OVERRIDES", "glm:badmode"),
     ],
 )
 def test_load_config_rejects_invalid_values(
@@ -194,3 +223,20 @@ def test_load_config_rejects_min_effective_providers_greater_than_effective(monk
 
     with pytest.raises(ConfigError):
         load_config()
+
+
+def test_load_config_reads_web_api_token_and_port(monkeypatch: pytest.MonkeyPatch) -> None:
+    """应读取 API_TOKEN 与 WEB_PORT。"""
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "x")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "x")
+    monkeypatch.setenv("API_TOKEN", "t")
+    monkeypatch.setenv("WEB_PORT", "8000")
+    monkeypatch.setenv("WEB_BIND_HOST", "127.0.0.1")
+    monkeypatch.setenv("DRY_RUN", "true")
+    monkeypatch.setenv("APP_ENV", "test")
+
+    config = load_config()
+
+    assert config.api_token == "t"
+    assert config.web_port == 8000
+    assert config.web_bind_host == "127.0.0.1"

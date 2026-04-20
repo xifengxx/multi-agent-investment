@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-RunMode = Literal["daily", "weekly"]
+RunMode = Literal["daily", "weekly", "web", "worker"]
 AppEnv = Literal["dev", "test", "prod"]
 InstrumentType = Literal["stock", "etf"]
 

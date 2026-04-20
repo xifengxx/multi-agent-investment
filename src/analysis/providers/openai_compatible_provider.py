@@ -10,8 +10,11 @@
 
 from __future__ import annotations
 
+import base64
 import json
+import mimetypes
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 import urllib.request
 from urllib.error import HTTPError, URLError
@@ -61,6 +64,11 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         """返回 provider 名称。"""
         return self.provider_name
 
+    @property
+    def supports_file_input(self) -> bool:
+        """声明 OpenAI-compatible provider 支持附件输入。"""
+        return True
+
     def invoke(self, prompt: str) -> str:
         """调用 OpenAI-compatible Chat Completions 接口并返回文本内容。
 
@@ -100,6 +108,61 @@ class OpenAICompatibleProvider(BaseLLMProvider):
 
         # attempts>=1，循环中要么 return，要么在最后一次 attempt 里 raise
         raise RuntimeError("OpenAICompatibleProvider unknown_error")
+
+    def invoke_with_files(self, *, prompt: str, file_paths: list[str]) -> str:
+        """调用 OpenAI-compatible Chat Completions，并附带 input_file parts。
+
+        Args:
+            prompt: 用户文本提示。
+            file_paths: 待上传文件路径列表。
+
+        Returns:
+            choices[0].message.content 文本。
+
+        Raises:
+            RuntimeError: 文件读取或请求失败，错误码前缀为 file_upload_failed。
+        """
+        if not file_paths:
+            raise RuntimeError("file_upload_failed:empty_file_paths")
+
+        url = _build_chat_completions_url(self.base_url)
+        headers: dict[str, str] = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
+        }
+        if self.extra_headers:
+            headers.update({str(k): str(v) for k, v in self.extra_headers.items()})
+
+        try:
+            content_parts = self._build_content_parts(prompt=prompt, file_paths=file_paths)
+            payload = {
+                "model": self.model,
+                "messages": [{"role": "user", "content": content_parts}],
+            }
+            body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            response_bytes = self._post(url=url, body=body, headers=headers)
+            return self._parse_chat_completions_response(response_bytes)
+        except RuntimeError as e:
+            raise RuntimeError(f"file_upload_failed:{e}") from e
+        except Exception as e:  # noqa: BLE001
+            raise RuntimeError(f"file_upload_failed:{e}") from e
+
+    def _build_content_parts(self, *, prompt: str, file_paths: list[str]) -> list[dict[str, str]]:
+        """构造 Chat Completions 消息 content，包含 text 与 input_file 部分。"""
+        parts: list[dict[str, str]] = [{"type": "text", "text": prompt}]
+        for raw_path in file_paths:
+            file_path = Path(raw_path)
+            file_bytes = file_path.read_bytes()
+            mime_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
+            parts.append(
+                {
+                    "type": "input_file",
+                    "filename": file_path.name,
+                    "mime_type": mime_type,
+                    "data": base64.b64encode(file_bytes).decode("ascii"),
+                }
+            )
+        return parts
 
     def _post(self, *, url: str, body: bytes, headers: dict[str, str]) -> bytes:
         """执行一次 HTTP POST 请求并返回响应 bytes。"""

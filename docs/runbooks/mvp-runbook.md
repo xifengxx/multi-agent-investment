@@ -46,6 +46,9 @@ python -m pip install openpyxl pytest
 - `SQLITE_PATH`：SQLite DB 文件路径，默认 `data/app.db`
 - `ANALYSIS_PARALLELISM`：分析并发数，默认 `3`
 - `LLM_MAX_INSTRUMENTS_PER_TYPE`：单次运行每类（stock/etf）最多分析的标的数，默认 `20`
+- `PANEL_MAX_SHEETS`：单个 xlsx 最多解析工作表数，默认 `60`
+- `PANEL_FALLBACK_MAX_SYMBOLS`：文本回退摘要最多保留 symbol 数，默认 `120`
+- `PANEL_FALLBACK_MAX_POINTS_PER_SYMBOL`：文本回退摘要每个 symbol 最多保留点数，默认 `6`
 - `DRY_RUN`：是否 dry run，默认 `false`（可用 `1/true/yes/on`）
 - `APP_ENV`：`dev/test/prod`，默认 `dev`
 
@@ -59,6 +62,9 @@ export DRY_RUN="true"
 export DATA_ROOT="stock_data"
 export SQLITE_PATH="data/app.db"
 export ANALYSIS_PARALLELISM="3"
+export PANEL_MAX_SHEETS="60"
+export PANEL_FALLBACK_MAX_SYMBOLS="120"
+export PANEL_FALLBACK_MAX_POINTS_PER_SYMBOL="6"
 ```
 
 ### 2.4 LLM（可选：真实 Providers）
@@ -205,6 +211,22 @@ print("run_id=", run_id)
 PY
 ```
 
+### 4.3 Hybrid（file-first -> summary fallback）流程说明
+
+daily 的 L3 分析默认采用“附件优先、失败降级摘要文本”：
+
+- 当 provider `supports_file_input=True`：先调用 `invoke_with_files(prompt, [file])`
+- 附件调用失败：记录 `runtime_errors`（key 形如 `provider.instrument.file`），并自动回退 `invoke(summary_prompt)`
+- 回退成功：流程继续，仍会走 `llm_reports -> llm_outputs -> decisions -> notifications`
+- 当 provider `supports_file_input=False`：直接走文本 prompt（非 summary fallback）
+
+建议联调参数：
+
+- 大文件/多 sheet 先限制 `PANEL_MAX_SHEETS`（如 `20~40`）
+- 文本回退遇到 400/413（输入过大）时，优先下调：
+  - `PANEL_FALLBACK_MAX_SYMBOLS`（如 120 -> 60 -> 30）
+  - `PANEL_FALLBACK_MAX_POINTS_PER_SYMBOL`（如 6 -> 3 -> 1）
+
 ---
 
 ## 5. Weekly 运行方式
@@ -262,6 +284,20 @@ python -m app.main weekly
 - 非 dry_run 时检查：
   - `TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID` 是否正确
   - 网络连通性
+
+### 6.4 Hybrid 附件/回退相关错误码
+
+常见运行期错误会进入降级通知中的 `runtime_errors`：
+
+- `*.file:file_input_not_supported`：provider 未实现附件接口，检查 provider 能力声明
+- `*.file:file_upload_failed:*`：附件上传/读取失败，自动尝试 summary 文本回退
+- `*.text:*`：文本路径也失败（含 summary fallback），该 provider 在该 instrument 视为无效
+
+排查建议：
+
+- 先查 `llm_reports` 是否有记录，确认是否至少有一个路径成功产出可解析 JSON
+- 查 `runs.error_message` 与降级通知 `runtime_errors`，定位是 file 分支失败还是 text 分支失败
+- 若仅 fallback 失败，优先收缩 `PANEL_FALLBACK_MAX_SYMBOLS / PANEL_FALLBACK_MAX_POINTS_PER_SYMBOL`
 
 ---
 

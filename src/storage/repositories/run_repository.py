@@ -45,6 +45,19 @@ class RunRepository:
         ).fetchone()
         return row
 
+    def list_runs(self, *, limit: int = 50) -> list[sqlite3.Row]:
+        """按 started_at 倒序列出最近 runs。"""
+        rows = self._connection.execute(
+            """
+            SELECT *
+            FROM runs
+            ORDER BY started_at DESC
+            LIMIT ?
+            """,
+            (int(limit),),
+        ).fetchall()
+        return list(rows)
+
     def mark_run_end(
         self,
         *,

@@ -33,6 +33,6 @@ def test_init_db_creates_task6_tables(tmp_path: Path) -> None:
         assert _table_exists(conn, "notifications")
         assert _table_exists(conn, "paper_trades")
         assert _table_exists(conn, "positions")
+        assert _table_exists(conn, "llm_reports")
     finally:
         conn.close()
-

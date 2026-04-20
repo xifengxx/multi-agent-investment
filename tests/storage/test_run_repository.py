@@ -58,3 +58,31 @@ def test_run_repository_can_mark_stale_running_runs_as_failed(tmp_path: Path) ->
     assert recent_row is not None
     assert recent_row["status"] == "RUNNING"
 
+
+def test_run_repository_can_list_recent_runs(tmp_path: Path) -> None:
+    """应能按 started_at 倒序列出最近 runs。"""
+    db_path = tmp_path / "app.db"
+    conn = open_sqlite_connection(db_path)
+    try:
+        init_db(conn)
+        repo = RunRepository(conn)
+        repo.create_run(
+            run_id="run-1",
+            trigger_type="manual_daily",
+            snapshot_date="2026-04-17",
+            status="RUNNING",
+            started_at="2026-04-17T00:00:00+00:00",
+        )
+        repo.create_run(
+            run_id="run-2",
+            trigger_type="manual_daily",
+            snapshot_date="2026-04-17",
+            status="RUNNING",
+            started_at="2026-04-17T00:00:10+00:00",
+        )
+
+        rows = repo.list_runs(limit=10)
+    finally:
+        conn.close()
+
+    assert [str(r["run_id"]) for r in rows[:2]] == ["run-2", "run-1"]

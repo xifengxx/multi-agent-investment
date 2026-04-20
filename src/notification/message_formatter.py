@@ -5,7 +5,13 @@ from __future__ import annotations
 from typing import Any
 
 
-def format_recommendation_message(*, run_id: str, decisions: list[dict[str, Any]]) -> str:
+def format_recommendation_message(
+    *,
+    run_id: str,
+    decisions: list[dict[str, Any]],
+    reports_dir: str | None = None,
+    summary_md_path: str | None = None,
+) -> str:
     """将决策榜单格式化为可直接发送的文本消息。
 
     约定：
@@ -57,7 +63,15 @@ def format_recommendation_message(*, run_id: str, decisions: list[dict[str, Any]
         _render_section("Stocks", groups.get("stock", [])),
         _render_section("ETFs", groups.get("etf", [])),
     ]
-    return "\n\n".join([header, *sections]).strip()
+    tail: list[str] = []
+    if summary_md_path:
+        tail.append(f"Summary: {summary_md_path}")
+    if reports_dir:
+        tail.append(f"Reports: {reports_dir}")
+    parts = [header, *sections]
+    if tail:
+        parts.append("\n".join(tail))
+    return "\n\n".join(parts).strip()
 
 
 def format_weekly_review_message(*, run_id: str, report: dict[str, Any]) -> str:

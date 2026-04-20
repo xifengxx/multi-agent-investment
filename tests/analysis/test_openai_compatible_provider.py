@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import sys
 from pathlib import Path
@@ -111,3 +112,36 @@ def test_invoke_raises_and_does_not_leak_api_key_on_error() -> None:
 
     assert api_key not in str(excinfo.value)
     assert "boom" in str(excinfo.value)
+
+
+def test_invoke_with_files_adds_input_file_parts(tmp_path: Path) -> None:
+    """invoke_with_files 应在消息 content 中追加 input_file parts。"""
+    provider = OpenAICompatibleProvider(
+        base_url="https://example.com/v1",
+        model="gpt-test",
+        api_key="sk-secret",
+        timeout_seconds=3,
+        max_retries=0,
+        extra_headers={},
+    )
+
+    csv_path = tmp_path / "sample.csv"
+    file_bytes = b"a,b\n1,2\n"
+    csv_path.write_bytes(file_bytes)
+
+    urlopen_mock = Mock(
+        return_value=_fake_http_response(payload={"choices": [{"message": {"content": "OK"}}]})
+    )
+    with patch("urllib.request.urlopen", urlopen_mock):
+        text = provider.invoke_with_files(prompt="do analyze", file_paths=[str(csv_path)])
+
+    assert provider.supports_file_input is True
+    assert text == "OK"
+    request = urlopen_mock.call_args.args[0]
+    sent = json.loads(request.data.decode("utf-8"))
+    content_parts = sent["messages"][0]["content"]
+    assert content_parts[0] == {"type": "text", "text": "do analyze"}
+    assert content_parts[1]["type"] == "input_file"
+    assert content_parts[1]["filename"] == "sample.csv"
+    assert content_parts[1]["mime_type"] == "text/csv"
+    assert content_parts[1]["data"] == base64.b64encode(file_bytes).decode("ascii")

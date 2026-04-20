@@ -61,3 +61,24 @@ def test_format_recommendation_message_groups_by_type_and_is_deterministic() -> 
     # etf 也应出现
     assert "1. SPY" in msg1
 
+
+def test_format_recommendation_message_appends_summary_path_when_provided() -> None:
+    decisions = [
+        {
+            "snapshot_date": "2026-04-15",
+            "instrument_type": "stock",
+            "symbol": "AAPL",
+            "votes": 4,
+            "tier": 1,
+            "rank_in_list": 1,
+            "summary_rationale": "a",
+        }
+    ]
+    msg = format_recommendation_message(
+        run_id="run-001",
+        decisions=decisions,
+        summary_md_path="/tmp/reports/2026-04-15/run-001/summary.md",
+        reports_dir="/tmp/reports/2026-04-15/run-001",
+    )
+    assert "summary.md" in msg
+    assert "/tmp/reports/2026-04-15/run-001" in msg
