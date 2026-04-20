@@ -113,6 +113,20 @@ def _read_non_negative_int_env(key: str, default: int) -> int:
     return value
 
 
+def _read_optional_non_negative_int_env(key: str) -> int | None:
+    """读取可选非负整型环境变量（>=0），缺失/空值返回 None。"""
+    raw = os.getenv(key, "").strip()
+    if not raw:
+        return None
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ConfigError(f"{key} 不是合法整数: {raw}") from exc
+    if value < 0:
+        raise ConfigError(f"{key} 必须大于等于 0: {raw}")
+    return value
+
+
 def _read_bool_env(key: str, default: bool) -> bool:
     """读取布尔环境变量，支持常见真值与假值。"""
     raw = os.getenv(key, str(default)).strip().lower()
@@ -207,7 +221,11 @@ def load_config() -> AppConfig:
     reports_base_url = _read_str_env("REPORTS_BASE_URL", default="http://127.0.0.1:8888")
     api_token = _read_str_env("API_TOKEN", default="")
     web_bind_host = _read_str_env("WEB_BIND_HOST", default="127.0.0.1")
-    web_port = _read_non_negative_int_env("WEB_PORT", default=8000)
+    web_port = _read_optional_non_negative_int_env("WEB_PORT")
+    if web_port is None:
+        web_port = _read_optional_non_negative_int_env("PORT")
+    if web_port is None:
+        web_port = 8000
     worker_poll_interval_seconds = _read_non_negative_int_env("WORKER_POLL_INTERVAL_SECONDS", default=2)
     worker_max_attempts = _read_non_negative_int_env("WORKER_MAX_ATTEMPTS", default=3)
 

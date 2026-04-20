@@ -54,6 +54,7 @@ def main() -> int:
             raise SystemExit("--worker-id is required for worker mode")
         from worker.job_worker import JobWorker
 
+        print(f"mode=worker, env={config.app_env}, dry_run={config.dry_run}, worker_id={worker_id}")
         worker = JobWorker(worker_id=worker_id, config=config, providers=None)
         worker.run_forever()
         return 0

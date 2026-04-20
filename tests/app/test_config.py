@@ -240,3 +240,18 @@ def test_load_config_reads_web_api_token_and_port(monkeypatch: pytest.MonkeyPatc
     assert config.api_token == "t"
     assert config.web_port == 8000
     assert config.web_bind_host == "127.0.0.1"
+
+
+def test_load_config_reads_port_when_web_port_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """当 WEB_PORT 缺失时，应回退读取 PORT。"""
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "x")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "x")
+    monkeypatch.setenv("API_TOKEN", "t")
+    monkeypatch.setenv("PORT", "12345")
+    monkeypatch.delenv("WEB_PORT", raising=False)
+    monkeypatch.setenv("DRY_RUN", "true")
+    monkeypatch.setenv("APP_ENV", "test")
+
+    config = load_config()
+
+    assert config.web_port == 12345
